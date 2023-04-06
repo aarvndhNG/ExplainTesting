@@ -61,7 +61,11 @@ namespace RandomEnemyPlugin
             spawnPosition.X += Main.rand.Next(-200, 200);
             spawnPosition.Y -= 300;
 
-            NPC.NewNPC((int)spawnPosition.X, (int)spawnPosition.Y, npcType);
+            int npcType = Main.rand.Next(NPCID.Count); // choose a random NPC type
+            int x = player.TileX;
+            int y = player.TileY - 10;
+            int npcIndex = NPC.NewNPC(x, y, npcType); // spawn the NPC
+
             TShock.Utils.Broadcast($"A {Lang.GetNPCName(npcType)} has spawned near {player.Name}!", _config.SpawnAnnouncementColor);
         }
     }
