@@ -1,6 +1,6 @@
 ﻿using System;
+using System;
 using System.Collections.Generic;
-using Microsoft.Xna.Framework;
 using Terraria;
 using TerrariaApi.Server;
 using TShockAPI;
@@ -62,32 +62,8 @@ namespace RandomEnemyPlugin
             spawnPosition.X += Main.rand.Next(-200, 200);
             spawnPosition.Y -= 300;
 
-            string npcTypeName = parameters[0].ToLowerInvariant();
-            int npcType;
-            if (!int.TryParse(parameters[1], out npcType))
-            {
-              // handle invalid npcType parameter
-                return;
-            }
-
-              // Spawn NPC
-            int npcIndex = NPC.NewNPC(player.Center.X, player.Center.Y, npcType, 0, 0f, 0f, 0f, 0f, 255);
-            if (npcIndex == Main.maxNPCs)
-            {
-              // handle failed NPC spawn
-                return;
-            }
-
-             // Get the spawned NPC
-            NPC npc = Main.npc[npcIndex];
-
-             // Set the NPC's name and color
-            npc.SetDefaults(npcType);
-            npc.GivenName = npcTypeName;
-            npc.color = Color.Red;
-
-
-            TShock.Utils.Broadcast($"A {Lang.GetNPCName(npcType)} has spawned near {player.Name}!", _config.SpawnAnnouncementColor);
+            NPC.NewNPC((int)spawnPosition.X, (int)spawnPosition.Y, npcType);
+            TShock.Utils.Broadcast($"A {Lang.GetNPCName(npcType)} has spawned near {player.Name}!", new Color(_config.SpawnAnnouncementColor));
         }
     }
 
