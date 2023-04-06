@@ -1,146 +1,83 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using Terraria;
 using TerrariaApi.Server;
 using TShockAPI;
 
-namespace AIBot
+namespace RandomEnemyPlugin
 {
     [ApiVersion(2, 1)]
-    public class AIBotPlugin : TerrariaPlugin
+    public class RandomEnemyPlugin : TerrariaPlugin
     {
-        private static AIChatBot _bot;
+        private Config _config;
 
-        public override string Name => "AIBot Plugin";
-        public override string Author => "Your Name";
-        public override string Description => "An AI functional bot for your TShock server";
+        public override string Name => "RandomEnemyPlugin";
+        public override string Author => "YourName";
+        public override string Description => "Spawns a random enemy.";
         public override Version Version => new Version(1, 0, 0);
 
-        public AIBotPlugin(Main game) : base(game)
+        public RandomEnemyPlugin(Main game) : base(game)
         {
         }
 
         public override void Initialize()
         {
-            _bot = new AIChatBot();
-            ServerApi.Hooks.ServerChat.Register(this, OnServerChat);
+            Commands.ChatCommands.Add(new Command("spawnenemy.spawn", SpawnRandomEnemy, "spawnenemy"));
+            LoadConfig();
         }
 
-        private void OnServerChat(ServerChatEventArgs args)
+        private void LoadConfig()
         {
-            if (!args.Handled && args.Text.StartsWith(TShockAPI.TShock.Config.CommandSpecifier))
-            {
-                var text = args.Text.Substring(1);
-                var parts = text.Split(' ');
-
-                if (parts.Length == 1 && parts[0] == "hello")
-                {
-                    TShock.Utils.Broadcast($"{args.Who} says hello to {_bot.Name}");
-                    args.Handled = true;
-                }
-                else
-                {
-                    var reply = _bot.GenerateReply(text, args.Who);
-                    if (!string.IsNullOrEmpty(reply))
-                    {
-                        TShock.Utils.Broadcast($"{_bot.Name}: {reply}");
-                        args.Handled = true;
-                    }
-                }
-            }
+            _config = Config.Read();
         }
 
-        protected override void Dispose(bool disposing)
+        private void SaveConfig()
         {
-            if (disposing)
-            {
-                ServerApi.Hooks.ServerChat.Deregister(this, OnServerChat);
-            }
-
-            base.Dispose(disposing);
-        }
-    }
-
-    public class AIChatBot
-    {
-        private readonly string[] _greetings =
-        {
-            "Hi there!",
-            "Hello!",
-            "Greetings!",
-            "Howdy!",
-            "Hey!"
-        };
-
-        private readonly string[] _goodbyes =
-        {
-            "Goodbye!",
-            "See you later!",
-            "Farewell!",
-            "Take care!",
-            "Until next time!"
-        };
-
-        private readonly string[] _thanks =
-        {
-            "You're welcome!",
-            "No problem!",
-            "Happy to help!",
-            "Anytime!",
-            "Glad to be of service!"
-        };
-
-        private readonly string[] _confused =
-        {
-            "I'm sorry, I don't understand.",
-            "Could you please rephrase that?",
-            "I'm not sure what you mean.",
-            "Can you please clarify?",
-            "I don't know what to say to that."
-        };
-
-        private readonly Random _random = new Random();
-        public string Name { get; set; }
-
-        public AIChatBot()
-        {
-            Name = "AIBot";
+            _config.Write();
         }
 
-        public string GenerateReply(string message, int playerId)
+        private void SpawnRandomEnemy(CommandArgs args)
         {
-            if (message.EndsWith("?"))
+            int playerId = args.Player.Index;
+            TSPlayer player = TShock.Players[playerId];
+            if (player == null)
             {
-                return $"{_random.Choose(_confused)}";
+                args.Player.SendErrorMessage("You are not logged in.");
+                return;
             }
-            else if (message.Contains("hello"))
+
+            var enemyTypes = _config.EnemyTypes;
+            if (enemyTypes.Count == 0)
             {
-                return $"{_random.Choose(_greetings)}";
+                args.Player.SendErrorMessage("There are no enemy types configured.");
+                return;
             }
-            else if (message.Contains("bye"))
-            {
-                return $"{_random.Choose(_goodbyes)}";
-            }
-            else if (message.Contains("thank"))
-            {
-                return $"{_random.Choose(_thanks)}";
-            }
-            else
-            {
-                return string.Empty;
-            }
+
+            var random = new Random();
+            var randomIndex = random.Next(0, enemyTypes.Count);
+            var npcType = enemyTypes[randomIndex];
+
+            var spawnPosition = player.TPlayer.position;
+            spawnPosition.X += Main.rand.Next(-200, 200);
+            spawnPosition.Y -= 300;
+
+            NPC.NewNPC((int)spawnPosition.X, (int)spawnPosition.Y, npcType);
+            TShock.Utils.Broadcast($"A {Lang.GetNPCName(npcType)} has spawned near {player.Name}!", _config.SpawnAnnouncementColor);
         }
     }
 
- public static class Extensions
-{
-    public static T Choose<T>(this Random random, IEnumerable<T> source)
+    internal class Config
     {
-        var count = source.Count();
-        var index = random.Next(count);
-        return source.ElementAt(index);
-      }
-   }
+        public List<int> EnemyTypes { get; set; } = new List<int>();
+        public string SpawnAnnouncementColor { get; set; } = "yellow";
+
+        public static Config Read()
+        {
+            return new Config();
+        }
+
+        public void Write()
+        {
+        }
+    }
 }
-    
