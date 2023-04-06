@@ -80,14 +80,14 @@ namespace BotPlugin
         
         private static BotConfig _config;
 
-    public override void Initialize()
-    {
-        ReadConfig();
-        // ...
-    }
+        public override void Initialize()
+        {
+            ReadConfig();
+            // ...
+        }
 
-    private void ReadConfig()
-    {
+        private void ReadConfig()
+        {
         var configFile = Path.Combine(TShock.SavePath, "bot_config.json");
         if (!File.Exists(configFile))
         {
