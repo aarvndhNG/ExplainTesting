@@ -29,6 +29,34 @@ namespace BotPlugin
             TShock.Utils.Broadcast($"{_config.WelcomeMessage} {e.Who}!");
         }
         
+        private static BotConfig _config;
+
+        public override void Initialize()
+        {
+            ReadConfig();
+            // ...
+        }
+
+        private void ReadConfig()
+        {
+        var configFile = Path.Combine(TShock.SavePath, "bot_config.json");
+        if (!File.Exists(configFile))
+        {
+            _config = new BotConfig();
+            using (var writer = new StreamWriter(configFile))
+            {
+                writer.Write(JsonConvert.SerializeObject(_config, Formatting.Indented));
+            }
+        }
+        else
+        {
+            using (var reader = new StreamReader(configFile))
+            {
+                _config = JsonConvert.DeserializeObject<BotConfig>(reader.ReadToEnd());
+        
+        }
+
+        
         public class BotConfig
         {
             public string BotName { get; set; } = "Bot";
@@ -78,33 +106,7 @@ namespace BotPlugin
             player.SendSuccessMessage($"Teleported to {target.Name}.");
         }
         
-        private static BotConfig _config;
-
-        public override void Initialize()
-        {
-            ReadConfig();
-            // ...
-        }
-
-        private void ReadConfig()
-        {
-        var configFile = Path.Combine(TShock.SavePath, "bot_config.json");
-        if (!File.Exists(configFile))
-        {
-            _config = new BotConfig();
-            using (var writer = new StreamWriter(configFile))
-            {
-                writer.Write(JsonConvert.SerializeObject(_config, Formatting.Indented));
-            }
-        }
-        else
-        {
-            using (var reader = new StreamReader(configFile))
-            {
-                _config = JsonConvert.DeserializeObject<BotConfig>(reader.ReadToEnd());
         
-        }
-
         private void TeleportAll(CommandArgs args)
         {
             var player = args.Player;
