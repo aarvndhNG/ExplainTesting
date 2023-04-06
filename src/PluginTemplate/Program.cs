@@ -28,6 +28,31 @@ namespace BotPlugin
         {
             TShock.Utils.Broadcast($"{_config.WelcomeMessage} {e.Who}!");
         }
+        
+        public class BotConfig
+        {
+            public string BotName { get; set; } = "Bot";
+            public string BotPrefix { get; set; } = "!";
+            public string BotCommandChar { get; set; } = "/";
+            public string BotCommandCharAlias { get; set; } = "!";
+            public string BotCommandCharAlias2 { get; set; } = ".";
+            public bool BotAnnounceConnections { get; set; } = true;
+            public string BotAnnouncementFormat { get; set; } = "[{0}] {1} has joined the server.";
+            public bool BotAnnounceDisconnections { get; set; } = true;
+            public string BotDisconnectionFormat { get; set; } = "[{0}] {1} has left the server.";
+            public bool BotLogChat { get; set; } = true;
+            public string BotLogChatFormat { get; set; } = "[{0}] [{1}] {2}: {3}";
+            public bool BotLogCommands { get; set; } = true;
+            public string BotLogCommandsFormat { get; set; } = "[{0}] {1}: {2}";
+            public bool BotLogWarnings { get; set; } = true;
+            public string BotLogWarningsFormat { get; set; } = "[{0}] WARNING: {1}";
+            public string BotCommandPrefix { get; set; } = "!";
+            public string BotCommandSuffix { get; set; } = "";
+            public bool BotAutoSave { get; set; } = true;
+            public int BotAutoSaveInterval { get; set; } = 600;
+            public bool BotAutoRestart { get; set; } = false;
+            public int BotAutoRestartInterval { get; set; } = 3600;
+        }
 
 
         private void BotHelp(CommandArgs args)
