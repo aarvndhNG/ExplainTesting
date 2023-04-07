@@ -32,6 +32,8 @@ namespace CustomMessagesPlugin
 
         public override void DeInitialize()
         {
+            base.DeInitialize();
+            
             ServerApi.Hooks.ServerJoin.Deregister(this, OnServerJoin);
             ServerApi.Hooks.ServerLeave.Deregister(this, OnServerLeave);
             TShockAPI.Hooks.GameHooks.PostGetData.Deregister(this, OnPostGetData);
