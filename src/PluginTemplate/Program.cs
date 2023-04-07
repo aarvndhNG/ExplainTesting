@@ -12,11 +12,10 @@ namespace CustomMessagesPlugin
     public class CustomMessagesPlugin : TerrariaPlugin
     {
         private Config _config;
-        private string _configPath = Path.Combine(TShock.SavePath, "CustomMessagesPlugin.json");
 
         public override string Name => "CustomMessagesPlugin";
         public override string Author => "YourName";
-        public override string Description => "Allows custom chat and join/leave messages.";
+        public override string Description => "Custom join, leave, and chat messages.";
         public override Version Version => new Version(1, 0, 0);
 
         public CustomMessagesPlugin(Main game) : base(game)
@@ -25,93 +24,78 @@ namespace CustomMessagesPlugin
 
         public override void Initialize()
         {
-            ServerApi.Hooks.ServerChat.Register(this, OnChat);
-            ServerApi.Hooks.ServerJoin.Register(this, OnJoin);
-            ServerApi.Hooks.ServerLeave.Register(this, OnLeave);
-
+            ServerApi.Hooks.ServerJoin.Register(this, OnServerJoin);
+            ServerApi.Hooks.ServerLeave.Register(this, OnServerLeave);
+            TShockAPI.Hooks.GameHooks.PostGetData.Register(this, OnPostGetData);
             LoadConfig();
         }
 
         public override void DeInitialize()
         {
-            ServerApi.Hooks.ServerChat.Deregister(this, OnChat);
-            ServerApi.Hooks.ServerJoin.Deregister(this, OnJoin);
-            ServerApi.Hooks.ServerLeave.Deregister(this, OnLeave);
+            ServerApi.Hooks.ServerJoin.Deregister(this, OnServerJoin);
+            ServerApi.Hooks.ServerLeave.Deregister(this, OnServerLeave);
+            TShockAPI.Hooks.GameHooks.PostGetData.Deregister(this, OnPostGetData);
+            SaveConfig();
         }
 
         private void LoadConfig()
         {
-            try
-            {
-                if (!File.Exists(_configPath))
-                {
-                    _config = new Config();
-                    SaveConfig();
-                }
-                else
-                {
-                    using (var reader = new StreamReader(_configPath))
-                    {
-                        var json = reader.ReadToEnd();
-                        _config = JsonConvert.DeserializeObject<Config>(json);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                TShock.Log.Error(ex.ToString());
-            }
+            _config = Config.Read();
         }
 
         private void SaveConfig()
         {
-            try
-            {
-                using (var writer = new StreamWriter(_configPath))
-                {
-                    var json = JsonConvert.SerializeObject(_config, Formatting.Indented);
-                    writer.Write(json);
-                }
-            }
-            catch (Exception ex)
-            {
-                TShock.Log.Error(ex.ToString());
-            }
+            _config.Write();
         }
 
-        private void OnChat(ServerChatEventArgs args)
+        private void OnServerJoin(JoinEventArgs args)
+        {
+            TShock.Utils.Broadcast(string.Format(_config.JoinMessage, args.Who, TShock.Players[args.Who].Name), _config.JoinColor);
+        }
+
+        private void OnServerLeave(LeaveEventArgs args)
+        {
+            TShock.Utils.Broadcast(string.Format(_config.LeaveMessage, args.Who, TShock.Players[args.Who].Name), _config.LeaveColor);
+        }
+
+        private void OnPostGetData(GetDataEventArgs args)
         {
             if (args.Handled)
                 return;
 
-            var message = args.Text;
-
-            if (_config.ChatMessages.TryGetValue(message, out string response))
+            if (args.MsgID == PacketTypes.ChatText && args.number1 >= 0 && args.number1 < 255)
             {
-                TShock.Utils.Broadcast(response, _config.ChatMessageColor);
-                args.Handled = true;
+                var player = TShock.Players[args.number1];
+                if (player == null)
+                    return;
+
+                var message = args.readBuffer.ReadString().Trim();
+                if (string.IsNullOrWhiteSpace(message))
+                    return;
+
+                TShock.Utils.Broadcast(string.Format(_config.ChatMessage, player.Name, message), _config.ChatColor);
             }
         }
+    }
 
-        private void OnJoin(JoinEventArgs args)
+    internal class Config
+    {
+        public string JoinMessage { get; set; } = "{1} ({0}) has joined the server.";
+        public string JoinColor { get; set; } = "yellow";
+
+        public string LeaveMessage { get; set; } = "{1} ({0}) has left the server.";
+        public string LeaveColor { get; set; } = "yellow";
+
+        public string ChatMessage { get; set; } = "{0}: {1}";
+        public string ChatColor { get; set; } = "white";
+
+        public static Config Read()
         {
-            var message = _config.JoinMessage.Replace("{player}", args.Who.ToString());
-            TShock.Utils.Broadcast(message, _config.JoinLeaveMessageColor);
+            return new Config();
         }
 
-        private void OnLeave(LeaveEventArgs args)
+        public void Write()
         {
-            var message = _config.LeaveMessage.Replace("{player}", args.Who.ToString());
-            TShock.Utils.Broadcast(message, _config.JoinLeaveMessageColor);
-        }
-
-        private class Config
-        {
-            public Dictionary<string, string> ChatMessages { get; set; } = new Dictionary<string, string>();
-            public string ChatMessageColor { get; set; } = "yellow";
-            public string JoinMessage { get; set; } = "{player} joined the server.";
-            public string LeaveMessage { get; set; } = "{player} left the server.";
-            public string JoinLeaveMessageColor { get; set; } = "white";
         }
     }
 }
