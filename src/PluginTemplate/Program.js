@@ -1,77 +1,48 @@
-let TShockAPI = require('tshockapi');
+const TShock = require("tshock");
+const Command = TShock.Command;
+const Votes = {};
+const Config = require("./config.json");
 
-let vanityItems = [];
-
-let VanityCommand = {
-    name: 'vanity',
-    desc: 'Sets your vanity items.',
-    usage: '/vanity <slot> <item> [prefix]',
-    func: setVanity,
-};
-
-function setVanity(args, player) {
-    if (args.length < 2) {
-        player.SendErrorMessage(`Invalid syntax! Usage: ${VanityCommand.usage}`);
+function voteCommand(args, player) {
+    if (args.length < 1) {
+        player.SendErrorMessage("Invalid syntax! Proper syntax: /vote <yes/no>");
         return;
     }
 
-    let slot = parseInt(args[0]);
-    let item = parseInt(args[1]);
+    let vote = args[0].toLowerCase();
 
-    if (isNaN(slot) || isNaN(item) || slot < 0 || slot > 2 || item < 0 || item >= TShockAPI.Utils.ItemMax) {
-        player.SendErrorMessage('Invalid slot or item ID!');
+    if (vote !== "yes" && vote !== "no") {
+        player.SendErrorMessage("Invalid vote! Please choose either 'yes' or 'no'.");
         return;
     }
 
-    let prefix = '';
-    if (args.length > 2) {
-        prefix = args.slice(2).join(' ');
+    if (Votes.hasOwnProperty(player.IP)) {
+        player.SendErrorMessage("You have already voted!");
+        return;
     }
 
-    vanityItems[slot] = { NetId: item, Prefix: prefix };
+    Votes[player.IP] = vote;
 
-    player.SendSuccessMessage(`Vanity slot ${slot} set to item ${item} with prefix "${prefix}".`);
-    player.SendData(PacketTypes.PlayerInfo, "", player.Index);
-}
+    TShock.Utils.Broadcast($"{player.Name} has voted {vote}!", Config.VoteColor);
 
-function onJoin(args) {
-    let player = TShockAPI.Players[args.Who];
-    player.SetData('vanity', vanityItems);
-}
+    let yesVotes = 0, noVotes = 0;
 
-function onPlayerData(args) {
-    let player = TShockAPI.Players[args.Msg.whoAmI];
-
-    if (args.MsgID == PacketTypes.PlayerInventory) {
-        let inventory = TShockAPI.DeserializeInventory(args.Msg.readBuffer, args.Msg.readBuffer.Length);
-        if (inventory != null) {
-            for (let i = 0; i < 3; i++) {
-                let item = inventory.armor[i + 10];
-                if (vanityItems[i] != null) {
-                    item.netDefaults(vanityItems[i].NetId);
-                    if (vanityItems[i].Prefix != '') {
-                        item.Prefix(vanityItems[i].Prefix);
-                    }
-                }
-            }
-            inventory.armor = inventory.armor.slice(0, 10 + 3).concat(inventory.armor.slice(10 + 6));
-            player.SendData(PacketTypes.PlayerInventory, "", player.Index, inventory.Serialize());
+    for (let ip in Votes) {
+        if (Votes[ip] === "yes") {
+            yesVotes++;
+        } else {
+            noVotes++;
         }
     }
+
+    let votePercentage = Math.round(yesVotes / (yesVotes + noVotes) * 100);
+
+    TShock.Utils.Broadcast($"Current vote: Yes - {yesVotes}, No - {noVotes}, {votePercentage}% voted yes", Config.VoteColor);
 }
 
-function onLogout(args) {
-    let player = TShockAPI.Players[args.Who];
-    player.SetData('vanity', null);
-}
+const VoteCommand = new Command("vote", voteCommand, {
+    usage: "/vote <yes/no>",
+    help: "Starts a server-wide vote with the specified yes or no question."
+});
 
-function onInitialize() {
-    TShockAPI.Commands.ChatCommands.push(VanityCommand);
-    TShockAPI.Hooks.ServerHooks.Join.register(onJoin);
-    TShockAPI.Hooks.NetHooks.GetData.Register(PacketTypes.PlayerData, onPlayerData);
-    TShockAPI.Hooks.ServerHooks.Leave.register(onLogout);
-}
-
-module.exports = {
-    init: onInitialize,
-};
+TShock.Commands.Add(VoteCommand);
