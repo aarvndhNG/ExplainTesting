@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Terraria;
 using TerrariaApi.Server;
-using static Terraria.Chat;
+using Terraria.Chat;
 using TShockAPI;
 using Microsoft.Xna.Framework.Color;
 using Newtonsoft.Json;
