@@ -1,41 +1,64 @@
 import clr
-clr.AddReference("TerrariaServerAPI")
-from TerrariaServerAPI import *
+import re
 
-class ShoppingSystem:
+clr.AddReference("TerrariaServer")
+from TerrariaServer import *
+
+class Mention:
     def __init__(self):
-        TShockAPI.Hooks.GameHooks.Join += self.on_join
+        self.config = TShockAPI.Config.ConfigurationFile("mention.config", True)
+        self.config.Settings.Add("Enabled", True)
+        self.config.Settings.Add("MentionTag", "[{player}]")
+        self.config.Settings.Add("MentionTagColor", "yellow")
+        self.config.Save()
+        
+        ServerApi.Hooks.ServerChat.Register(self, self.OnChat)
+        TShockAPI.Commands.ChatCommands.Add(new_command("mention", self.MentionPlayer, "mention <player>", "Mentions a player by name."))
+        
+    def OnChat(self, args):
+        if not self.config.Settings.Enabled:
+            return
+            
+        for player in TShock.Players:
+            if player and player.Active and player.Name != args.PlayerName:
+                # Match the pattern "@playername" in the chat message
+                pattern = r"@" + re.escape(player.Name)
+                match = re.search(pattern, args.Text)
 
-    def on_join(self, args):
-        player = TShock.Players[args.Who]
+                if match:
+                    # Replace the "@playername" with the configured mention tag
+                    mention = self.config.Settings.MentionTag.replace("{player}", player.Name)
+                    mention = TShockAPI.Utils.ParseMessage(mention, self.config.Settings.MentionTagColor)
+                    text = re.sub(pattern, mention, args.Text)
 
-        # Check if player needs to be given starting currency
-        if player.Name not in Config.keys():
-            Config[player.Name] = 100
-            TShock.Utils.Broadcast(f"{player.Name} has received 100 starting currency.", Color.Lime)
+                    # Send the modified message to the player who sent it
+                    player.SendSuccessMessage("<" + args.PlayerName + "> " + text)
 
-    def cmd_shop(self, args, player):
-        if len(args) < 2:
-            player.SendErrorMessage("Invalid syntax! Proper syntax: /shop <item name>")
+                    # Cancel the chat event to prevent the original message from being sent
+                    args.Handled = True
+                    return
+
+    def MentionPlayer(self, args, player):
+        if not args:
+            player.SendErrorMessage("Usage: /mention <player>")
             return
 
-        item_name = " ".join(args[1:]).lower()
-        item_price = Config["Shop"].get(item_name)
+        target_name = args[0]
 
-        if not item_price:
-            player.SendErrorMessage("Item not found in shop!")
-            return
+        for target in TShock.Players:
+            if target and target.Active and target.Name == target_name:
+                # Replace the mention tag with the configured tag
+                mention = self.config.Settings.MentionTag.replace("{player}", target.Name)
+                mention = TShockAPI.Utils.ParseMessage(mention, self.config.Settings.MentionTagColor)
 
-        if Config[player.Name] < item_price:
-            player.SendErrorMessage("You do not have enough currency to purchase this item!")
-            return
+                # Send the mention message to the player who used the command
+                player.SendSuccessMessage("You mentioned " + mention)
 
-        item_id = TShock.Utils.GetItemByName(item_name)[0].type
-        player.GiveItem(item_id)
-        Config[player.Name] -= item_price
-        TShock.Utils.Broadcast(f"{player.Name} has purchased {item_name} for {item_price} currency.", Color.Lime)
+                # Send the mention message to the targeted player
+                target.SendSuccessMessage(player.Name + " mentioned you " + mention)
 
-    def cmd_currency(self, args, player):
-        player.SendMessage(f"You currently have {Config[player.Name]} currency.", Color.Yellow)
+                return
 
-ShoppingSystem()
+        player.SendErrorMessage("Player not found: " + target_name)
+
+Mention()
