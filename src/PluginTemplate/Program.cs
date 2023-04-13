@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Terraria;
 using TerrariaApi.Server;
 using TShockAPI;
+using Microsoft.Xna.Framework;
 using Newtonsoft.Json;
 
 namespace MyPlugin
