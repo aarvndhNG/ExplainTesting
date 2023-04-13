@@ -1,10 +1,9 @@
 using System;
-using System.Drawing;
 using System.Collections.Generic;
 using Terraria;
 using TerrariaApi.Server;
 using TShockAPI;
-using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Color;
 using Newtonsoft.Json;
 
 namespace MyPlugin
@@ -49,7 +48,8 @@ namespace MyPlugin
             string response = GetResponse(message.ToLower());
             if (!string.IsNullOrEmpty(response))
             {
-                TShock.Utils.Broadcast($"[Chat Assistant] {response}", Color.Orange);
+                TShock.Utils.Broadcast($"[Chat Assistant] {response}", Microsoft.Xna.Framework.Color.Orange);
+
             }
         }
 
