@@ -32,7 +32,7 @@ namespace MyPlugin
 
         private void OnChat(ServerChatEventArgs args)
         {
-            string message = args.Message;
+            string message = args.Text;
             string response = GetResponse(message.ToLower());
             if (!string.IsNullOrEmpty(response))
             {
