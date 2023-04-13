@@ -3,18 +3,14 @@ using System.Collections.Generic;
 using Terraria;
 using TerrariaApi.Server;
 using TShockAPI;
+using Newtonsoft.Json;
 
 namespace MyPlugin
 {
     [ApiVersion(2, 1)]
     public class MyPlugin : TerrariaPlugin
     {
-        private Dictionary<string, string> Responses = new Dictionary<string, string>()
-        {
-            { "hello", "Hello there!" },
-            { "how are you", "I'm doing great, thanks for asking." },
-            { "help", "How can I help you?" }
-        };
+        private Dictionary<string, string> Responses;
 
         public override string Author => "Your name";
         public override string Name => "MyPlugin";
@@ -27,7 +23,22 @@ namespace MyPlugin
 
         public override void Initialize()
         {
+            LoadConfig();
             ServerApi.Hooks.ServerChat.Register(this, OnChat);
+        }
+
+        private void LoadConfig()
+        {
+            string configPath = Path.Combine(TShock.SavePath, "MyPluginConfig.json");
+            if (File.Exists(configPath))
+            {
+                string configText = File.ReadAllText(configPath);
+                Responses = JsonConvert.DeserializeObject<Dictionary<string, string>>(configText);
+            }
+            else
+            {
+                Responses = new Dictionary<string, string>();
+            }
         }
 
         private void OnChat(ServerChatEventArgs args)
