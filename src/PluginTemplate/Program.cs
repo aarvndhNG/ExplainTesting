@@ -93,7 +93,7 @@ namespace HuntingBunnyGame
             TShock.Utils.Broadcast("The hunting bunny game has been ended. No winner.", Color.LimeGreen);
         }
 
-        private void ShowBunnyCount(CommandArgsargs)
+        private void ShowBunnyCount(CommandArgs args)
 
         {
 
