@@ -1,117 +1,86 @@
-using System.IO;
-using Newtonsoft.Json;
+using System;
 using Terraria;
 using TerrariaApi.Server;
 using TShockAPI;
 
-namespace HousePlugin
+namespace SkySpawn
 {
-    [JsonObject(MemberSerialization.OptIn)]
-    public class Config
-    {
-        [JsonProperty]
-        public int Price { get; set; }
-        [JsonProperty]
-        public int HouseWidth { get; set; }
-        [JsonProperty]
-        public int HouseHeight { get; set; }
-    }
-
     [ApiVersion(2, 1)]
-    public class HousePlugin : TerrariaPlugin
+    public class SkySpawn : TerrariaPlugin
     {
-        private Config config;
-        private int houseWidth;
-        private int houseHeight;
-        private int price;
+        public override string Name => "SkySpawn";
+        public override string Author => "Your Name Here";
+        public override string Description => "Allows players to spawn items from the sky.";
+        public override Version Version => new Version(1, 0, 0);
 
-        public HousePlugin(Main game) : base(game)
+        public SkySpawn(Main game) : base(game)
         {
         }
 
         public override void Initialize()
         {
-            Commands.ChatCommands.Add(new Command("house.build", BuildHouse, "buildhouse"));
-            LoadConfig();
+            Commands.ChatCommands.Add(new Command("skyspawn.spawnitem", SkySpawnItem, "skyitem"));
         }
 
-        public override void Dispose(bool disposing)
+        private void SkySpawnItem(CommandArgs args)
+        {
+            if (!CanSpawnItem(args.Player))
+            {
+                args.Player.SendErrorMessage("You do not have permission to use this command.");
+                return;
+            }
+
+            if (args.Parameters.Count < 1)
+            {
+                args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /skyitem <item name or ID> [stack size]");
+                return;
+            }
+
+            string itemName = String.Join(" ", args.Parameters.GetRange(0, args.Parameters.Count - 1));
+            int stackSize;
+
+            if (!int.TryParse(args.Parameters[args.Parameters.Count - 1], out stackSize))
+            {
+                stackSize = 1;
+            }
+
+            if (stackSize > 999)
+            {
+                args.Player.SendErrorMessage("You cannot spawn more than 999 items at once.");
+                return;
+            }
+
+            var item = TShock.Utils.GetItemByIdOrName(itemName);
+
+            if (item == null || item.type <= 0 || item.type >= Main.maxItemTypes)
+            {
+                args.Player.SendErrorMessage("Invalid item name or ID!");
+                return;
+            }
+
+            var x = (int)(args.Player.TPlayer.position.X + (args.Player.TPlayer.width / 2)) / 16;
+            var y = (int)(args.Player.TPlayer.position.Y + (args.Player.TPlayer.height / 2)) / 16;
+
+            var itemNetID = (short)item.type;
+            var stack = (byte)stackSize;
+            var prefix = 0;
+            var itemID = Item.NewItem(x, y, 0, 0, itemNetID, stack, true, prefix, false);
+            NetMessage.SendData(21, -1, -1, null, itemID);
+            TShock.Log.ConsoleInfo("{0} spawned {1} ({2}) {3} time(s) from the sky.", args.Player.Name, item.Name, item.type, stackSize);
+        }
+
+        private bool CanSpawnItem(TSPlayer player)
+        {
+            return player.RealPlayer || player.Group.HasPermission("skyspawn.spawnitem.owner");
+        }
+
+        protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
-                SaveConfig();
+                // Cleanup
             }
             base.Dispose(disposing);
-        }
-
-        private void LoadConfig()
-        {
-            var configFile = Path.Combine(TShock.SavePath, "housepluginconfig.json");
-            if (File.Exists(configFile))
-            {
-                var json = File.ReadAllText(configFile);
-                var newConfig = JsonConvert.DeserializeObject<Config>(json);
-                price = newConfig.Price;
-                houseWidth = newConfig.HouseWidth;
-                houseHeight = newConfig.HouseHeight;
-            }
-            else
-            {
-                config = new Config
-                {
-                    Price = 1000,
-                    HouseWidth = 10,
-                    HouseHeight = 8
-                };
-                var json = JsonConvert.SerializeObject(config, Formatting.Indented);
-                File.WriteAllText(configFile, json);
-            }
-        }
-
-        private void SaveConfig()
-        {
-            config = new Config
-            {
-                Price = price,
-                HouseWidth = houseWidth,
-                HouseHeight = houseHeight
-            };
-            var json = JsonConvert.SerializeObject(config, Formatting.Indented);
-            File.WriteAllText(Path.Combine(TShock.SavePath, "housepluginconfig.json"), json);
-        }
-
-        private void BuildHouse(CommandArgs args)
-        {
-            var player = args.Player;
-            var width = houseWidth;
-            var height = houseHeight;
-            var x = player.TileX - width / 2;
-            var y = player.TileY - height;
-            var id = WorldGen.KillTile(x, y);
-            if (id)
-            {
-                player.SendSuccessMessage("Building house...");
-                WorldGen.BuildRoom(x, y, x + width, y + height);
-                TShock.Utils.Broadcast($"{player.Name} has built a house!", Color.LimeGreen);
-            }
-        }
-
-        public override Version Version => new Version(1, 0, 0);
-        public override string Name => "HousePlugin";
-        public override string Author => "Your Name";
-        public override string Description => "Allows players to build houses with a single command.";
-
-        public override object GetConfig()
-        {
-            return config;
-        }
-
-        public override void ReloadConfig(object config)
-        {
-            this.config = (Config)config;
-            price = this.config.Price;
-            houseWidth = this.config.HouseWidth;
-            houseHeight = this.config.HouseHeight;
         }
     }
 }
