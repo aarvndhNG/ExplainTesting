@@ -1,86 +1,83 @@
-using System;
-using Terraria;
-using TerrariaApi.Server;
-using TShockAPI;
+namespace CustomChatPlugin
 
-namespace SkySpawn
-{
-    [ApiVersion(2, 1)]
-    public class SkySpawn : TerrariaPlugin
-    {
-        public override string Name => "SkySpawn";
-        public override string Author => "Your Name Here";
-        public override string Description => "Allows players to spawn items from the sky.";
-        public override Version Version => new Version(1, 0, 0);
+open System
+open System.IO
+open System.Text.RegularExpressions
+open Terraria
+open TerrariaApi.Server
+open TShockAPI
 
-        public SkySpawn(Main game) : base(game)
-        {
-        }
+[<AutoLoad>]
+type Plugin() =
 
-        public override void Initialize()
-        {
-            Commands.ChatCommands.Add(new Command("skyspawn.spawnitem", SkySpawnItem, "skyitem"));
-        }
+    let mutable _config : Config = Config()
+    let mutable _prefix : string = ""
 
-        private void SkySpawnItem(CommandArgs args)
-        {
-            if (!CanSpawnItem(args.Player))
-            {
-                args.Player.SendErrorMessage("You do not have permission to use this command.");
-                return;
-            }
+    let sendMessageCommand =
+        { name = "send"
+          permissions = [|"customchat.send"|]
+          callback = fun args ->
+              match args.Parameters with
+              | [|message|] ->
+                  let formattedMessage = _config.chatFormat.Replace("{player}", args.Player.Name).Replace("{message}", message)
+                  TShock.Utils.Broadcast(formattedMessage, Color.White)
+              | _ -> TShock.Utils.SendErrorMessage(args.Player, "Invalid syntax! Proper syntax: /send [message]")
+          helpText = "Usage: /send [message]. Sends a custom chat message." 
+          subCommands = [] }
 
-            if (args.Parameters.Count < 1)
-            {
-                args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /skyitem <item name or ID> [stack size]");
-                return;
-            }
+    let onInitialize(_eventData : InitializationEventArgs) =
+        // Load configuration
+        _config <- Config.load()
 
-            string itemName = String.Join(" ", args.Parameters.GetRange(0, args.Parameters.Count - 1));
-            int stackSize;
+        // Register plugin commands
+        Commands.ChatCommands.Add(sendMessageCommand.name, sendMessageCommand.callback, sendMessageCommand.permissions)
 
-            if (!int.TryParse(args.Parameters[args.Parameters.Count - 1], out stackSize))
-            {
-                stackSize = 1;
-            }
+        // Set prefix from configuration
+        _prefix <- _config.chatPrefix
 
-            if (stackSize > 999)
-            {
-                args.Player.SendErrorMessage("You cannot spawn more than 999 items at once.");
-                return;
-            }
+    let onChat(_eventData : TerrariaApi.Server.ServerChatEventArgs) =
+        // Check if the message starts with the configured prefix
+        let message = _eventData.Text.Trim()
+        if message.StartsWith(_prefix) then
+            // Cancel the message event to prevent it from being sent to other players
+            _eventData.Handled <- true
 
-            var item = TShock.Utils.GetItemByIdOrName(itemName);
+            // Parse the message and send the custom chat message
+            let customMessage = message.Substring(_prefix.Length)
+            let formattedMessage = _config.chatFormat.Replace("{player}", _eventData.Player.Name).Replace("{message}", customMessage)
+            TShock.Utils.Broadcast(formattedMessage, Color.White)
 
-            if (item == null || item.type <= 0 || item.type >= Main.maxItemTypes)
-            {
-                args.Player.SendErrorMessage("Invalid item name or ID!");
-                return;
-            }
+    // Plugin methods
+    member __.Initialize() =
+        // Register plugin hooks
+        ServerApi.Hooks.GameInitialize.Register(this, onInitialize)
+        ServerApi.Hooks.ServerChat.Register(this, onChat)
 
-            var x = (int)(args.Player.TPlayer.position.X + (args.Player.TPlayer.width / 2)) / 16;
-            var y = (int)(args.Player.TPlayer.position.Y + (args.Player.TPlayer.height / 2)) / 16;
+    member __.Dispose() =
+        // Unregister plugin hooks
+        ServerApi.Hooks.GameInitialize.Deregister(this, onInitialize)
+        ServerApi.Hooks.ServerChat.Deregister(this, onChat)
 
-            var itemNetID = (short)item.type;
-            var stack = (byte)stackSize;
-            var prefix = 0;
-            var itemID = Item.NewItem(x, y, 0, 0, itemNetID, stack, true, prefix, false);
-            NetMessage.SendData(21, -1, -1, null, itemID);
-            TShock.Log.ConsoleInfo("{0} spawned {1} ({2}) {3} time(s) from the sky.", args.Player.Name, item.Name, item.type, stackSize);
-        }
+// Configuration file
+type Config() =
+    let mutable _chatPrefix : string = "!"
+    let mutable _chatFormat : string = "[{player}]: {message}"
 
-        private bool CanSpawnItem(TSPlayer player)
-        {
-            return player.RealPlayer || player.Group.HasPermission("skyspawn.spawnitem.owner");
-        }
+    member this.chatPrefix
+        with get() = _chatPrefix
+        and set(value) = _chatPrefix <- value
 
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                // Cleanup
-            }
-            base.Dispose(disposing);
-        }
-    }
-}
+    member this.chatFormat
+        with get() = _chatFormat
+        and set(value) = _chatFormat <- value
+
+    static member default() = Config()
+
+    static member load() =
+        let configFile = Path.Combine(TShock.SavePath, "CustomChatPlugin.json")
+        if not (File.Exists(configFile)) then
+            let config = Config.default()
+            File.WriteAllText(configFile, JsonConvert.SerializeObject(config, Formatting.Indented))
+            config
+        else
+            JsonConvert.DeserializeObject<Config>(File.ReadAllText(configFile)) |> Option.defaultValue(Config.default())
