@@ -7,33 +7,53 @@ using Terraria;
 using TerrariaApi.Server;
 using TShockAPI;
 
-namespace NGPlugins
+namespace PluginList
 {
     [ApiVersion(2, 1)]
-    public class NGPlugins : TerrariaPlugin
+    public class PluginList : TerrariaPlugin
     {
-        public override string Name { get { return "NGPlugins"; } }
-        public override string Author { get { return "Frontalvlad"; } }
-        public override string Description { get { return "Plugin specifically for NGVille server. Shows a list of plugins."; } }
-        public override Version Version { get { return Assembly.GetExecutingAssembly().GetName().Version; } }
+        public override string Name => "Plugin List";
+        public override string Author => "Your Name";
+        public override string Description => "Displays a list of all loaded plugins on the server.";
+        public override Version Version => new Version(1, 0, 0);
 
-        public NGPlugins(Main game)
-          : base(game)
+        public PluginList(Main game) : base(game) { }
+
+        public override void Initialize()
         {
+            Commands.ChatCommands.Add(new Command("pluginlist", PluginListCommand, "pluginlist"));
+            ServerApi.Hooks.ServerJoin.Register(this, OnServerJoin);
         }
 
-        public override void Initialize() => Commands.ChatCommands.Add(new Command("ngplugins", new CommandDelegate(this.ListPluginsCommand), new string[2]
+        private void PluginListCommand(CommandArgs args)
         {
-      "ngplugins",
-      "plugins"
-        }));
+            var plugins = PluginManager.Plugins;
+            var pluginNames = new List<string>();
 
-        private void ListPluginsCommand(CommandArgs args)
+            foreach (var plugin in plugins)
+            {
+                if (plugin.Plugin != this)
+                {
+                    pluginNames.Add(plugin.Plugin.Name);
+                }
+            }
+
+            args.Player.SendSuccessMessage("Plugins: " + string.Join(", ", pluginNames));
+        }
+
+        private void OnServerJoin(JoinEventArgs args)
         {
-            uint packedValue = Color.White.packedValue;
-            string colorTag = string.Format("[c/{0:X}:", (object)((uint)(((int)packedValue & (int)byte.MaxValue) << 16 | (int)packedValue & 65280) | (packedValue & 16711680U) >> 16));
-            string msg = "[i:547] [c/e3693f:Plugins]: " + string.Join("[c/ffffff:,] ", ((IEnumerable<PluginContainer>)ServerApi.Plugins).Select<PluginContainer, string>((Func<PluginContainer, string>)(p => colorTag + p.Plugin.Name.Replace("]", "]" + colorTag + "]") + "]")));
-            args.Player.SendInfoMessage(msg);
+            args.Player.SendSuccessMessage("Type /pluginlist to see a list of all loaded plugins.");
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                ServerApi.Hooks.ServerJoin.Deregister(this, OnServerJoin);
+            }
+
+            base.Dispose(disposing);
         }
     }
 }
