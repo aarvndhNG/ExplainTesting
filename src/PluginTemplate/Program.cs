@@ -1,73 +1,86 @@
 using System;
 using System.Collections.Generic;
-using Terraria;
-using TerrariaApi.Server;
+using System.IO;
+using Newtonsoft.Json;
 using TShockAPI;
+using Terraria;
 
-namespace MyPlugin
+namespace AutoBroadcastPlugin
 {
     [ApiVersion(2, 1)]
-    public class MyPlugin : TerrariaPlugin
+    public class AutoBroadcastPlugin : TerrariaPlugin
     {
-        private int _number;
-        private bool _gameStarted;
-        private List<TSPlayer> _players;
+        private DateTime lastBroadcastTime;
+        private int broadcastInterval;
+        private List<string> broadcastMessages;
+        private Color broadcastColor;
+        private Color broadcastPrefixColor;
 
-        public override string Name => "MyPlugin";
+        public override string Name => "AutoBroadcastPlugin";
         public override string Author => "Your Name";
-        public override string Description => "A custom TShock plugin.";
+        public override string Description => "Automatically broadcasts a message at a specified interval.";
         public override Version Version => new Version(1, 0, 0);
 
-        public MyPlugin(Main game) : base(game)
+        public AutoBroadcastPlugin(Main game) : base(game)
         {
+            lastBroadcastTime = DateTime.Now;
+            broadcastInterval = 60; // 1 minute
+            broadcastMessages = new List<string> { "Welcome to our server!", "Thanks for playing!", "Don't forget to vote!", "Join our Discord server!" };
+            broadcastColor = Color.Yellow;
+            broadcastPrefixColor = Color.White;
         }
 
         public override void Initialize()
         {
-            _players = new List<TSPlayer>();
-            Commands.ChatCommands.Add(new Command("myplugin.guess", Guess, "guess"));
-        }
+            TShockAPI.Hooks.GeneralHooks.Update += OnUpdate;
 
-        private void Guess(CommandArgs args)
-        {
-            if (!_gameStarted)
+            string configPath = Path.Combine(TShock.SavePath, "AutoBroadcastPlugin.json");
+            if (File.Exists(configPath))
             {
-                _number = new Random().Next(1, 101);
-                _gameStarted = true;
-                _players.Clear();
-                args.Player.SendSuccessMessage("Guess the number between 1 and 100!");
-            }
-
-            if (!_players.Contains(args.Player))
-            {
-                _players.Add(args.Player);
-            }
-
-            int guess;
-            if (!int.TryParse(args.Parameters[0], out guess))
-            {
-                args.Player.SendErrorMessage("Invalid guess!");
-                return;
-            }
-
-            if (guess < 1 || guess > 100)
-            {
-                args.Player.SendErrorMessage("Guess must be between 1 and 100!");
-                return;
-            }
-
-            if (guess == _number)
-            {
-                _gameStarted = false;
-                foreach (var player in _players)
-                {
-                    player.SendSuccessMessage("Congratulations! {0} guessed the number {1} and won the game!", args.Player.Name, _number);
-                }
+                string configJson = File.ReadAllText(configPath);
+                var config = JsonConvert.DeserializeObject<Config>(configJson);
+                broadcastInterval = config.BroadcastInterval;
+                broadcastMessages = config.BroadcastMessages;
+                broadcastColor = new Color(config.BroadcastColorR, config.BroadcastColorG, config.BroadcastColorB);
+                broadcastPrefixColor = new Color(config.BroadcastPrefixColorR, config.BroadcastPrefixColorG, config.BroadcastPrefixColorB);
             }
             else
             {
-                args.Player.SendSuccessMessage("Your guess is {0}.", guess);
+                var config = new Config();
+                string configJson = JsonConvert.SerializeObject(config, Formatting.Indented);
+                File.WriteAllText(configPath, configJson);
             }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                TShockAPI.Hooks.GeneralHooks.Update -= OnUpdate;
+            }
+            base.Dispose(disposing);
+        }
+
+        private void OnUpdate(EventArgs args)
+        {
+            if ((DateTime.Now - lastBroadcastTime).TotalSeconds >= broadcastInterval)
+            {
+                string message = broadcastMessages[new Random().Next(broadcastMessages.Count)];
+                TShock.Utils.Broadcast(message, broadcastColor, broadcastPrefixColor);
+                lastBroadcastTime = DateTime.Now;
+            }
+        }
+
+        private class Config
+        {
+            public int BroadcastInterval { get; set; } = 60;
+            public List<string> BroadcastMessages { get; set; } = new List<string> { "Welcome to our server!", "Thanks for playing!", "Don't forget to vote!", "Join our Discord server!" };
+            public byte BroadcastColorR { get; set; } = 255;
+            public byte BroadcastColorG { get; set; } = 255;
+            public byte BroadcastColorB { get; set; } = 0;
+            public byte BroadcastPrefixColorR { get; set; } = 255;
+            public byte BroadcastPrefixColorG { get; set; } = 255;
+            public byte BroadcastPrefixColorB { get; set; } = 255;
         }
     }
 }
