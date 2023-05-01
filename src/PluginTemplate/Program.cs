@@ -1,59 +1,73 @@
-using Microsoft.Xna.Framework;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
 using Terraria;
 using TerrariaApi.Server;
 using TShockAPI;
 
-namespace PluginList
+namespace MyPlugin
 {
     [ApiVersion(2, 1)]
-    public class PluginList : TerrariaPlugin
+    public class MyPlugin : TerrariaPlugin
     {
-        public override string Name => "Plugin List";
+        private int _number;
+        private bool _gameStarted;
+        private List<TSPlayer> _players;
+
+        public override string Name => "MyPlugin";
         public override string Author => "Your Name";
-        public override string Description => "Displays a list of all loaded plugins on the server.";
+        public override string Description => "A custom TShock plugin.";
         public override Version Version => new Version(1, 0, 0);
 
-        public PluginList(Main game) : base(game) { }
+        public MyPlugin(Main game) : base(game)
+        {
+        }
 
         public override void Initialize()
         {
-            Commands.ChatCommands.Add(new Command("pluginlist", PluginListCommand, "pluginlist"));
-            ServerApi.Hooks.ServerJoin.Register(this, OnServerJoin);
+            _players = new List<TSPlayer>();
+            Commands.ChatCommands.Add(new Command("myplugin.guess", Guess, "guess"));
         }
 
-        private void PluginListCommand(CommandArgs args)
+        private void Guess(CommandArgs args)
         {
-            var plugins = PluginManager.Plugins;
-            var pluginNames = new List<string>();
-
-            foreach (var plugin in plugins)
+            if (!_gameStarted)
             {
-                if (plugin.Plugin != this)
+                _number = new Random().Next(1, 101);
+                _gameStarted = true;
+                _players.Clear();
+                args.Player.SendSuccessMessage("Guess the number between 1 and 100!");
+            }
+
+            if (!_players.Contains(args.Player))
+            {
+                _players.Add(args.Player);
+            }
+
+            int guess;
+            if (!int.TryParse(args.Parameters[0], out guess))
+            {
+                args.Player.SendErrorMessage("Invalid guess!");
+                return;
+            }
+
+            if (guess < 1 || guess > 100)
+            {
+                args.Player.SendErrorMessage("Guess must be between 1 and 100!");
+                return;
+            }
+
+            if (guess == _number)
+            {
+                _gameStarted = false;
+                foreach (var player in _players)
                 {
-                    pluginNames.Add(plugin.Plugin.Name);
+                    player.SendSuccessMessage("Congratulations! {0} guessed the number {1} and won the game!", args.Player.Name, _number);
                 }
             }
-
-            args.Player.SendSuccessMessage("Plugins: " + string.Join(", ", pluginNames));
-        }
-
-        private void OnServerJoin(JoinEventArgs args)
-        {
-            args.Player.SendSuccessMessage("Type /pluginlist to see a list of all loaded plugins.");
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
+            else
             {
-                ServerApi.Hooks.ServerJoin.Deregister(this, OnServerJoin);
+                args.Player.SendSuccessMessage("Your guess is {0}.", guess);
             }
-
-            base.Dispose(disposing);
         }
     }
 }
