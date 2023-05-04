@@ -1,106 +1,234 @@
 using System;
-using Terraria;
-using TShockAPI;
-using TerrariaApi.Server;
 using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using TShockAPI;
+using Terraria;
+using TerrariaApi.Server;
+using Microsoft.Xna.Framework;
+using TShockAPI.DB;
 
-namespace RandomTeleportPlugin
+namespace inventorychecker
 {
     [ApiVersion(2, 1)]
-    public class RandomTeleportPlugin : TerrariaPlugin
+    public class inventoryviewers : TerrariaPlugin
     {
-        public override string Name => "RandomTeleportPlugin";
-        public override string Author => "Your Name Here";
-        public override string Description => "Teleports players to a random location on the map";
-        public override Version Version => new Version(1, 0, 0);
+        public override string Author => "Nightklp";
 
-        public RandomTeleportPlugin(Main game) : base(game)
+        public override string Description => "Plugin to view contents of a players inventory";
+
+        public override string Name => "InView";
+
+        public override Version Version => new Version(1, 0, 0, 0);
+
+        public inventoryviewers(Main game) : base(game)
         {
+
         }
 
         public override void Initialize()
         {
-            Commands.ChatCommands.Add(new Command("rtp.teleport", RandomTeleport, "rtp"));
+            Commands.ChatCommands.Add(new Command("inview.search", InventoryView, "inventoryview"));
+            Commands.ChatCommands.Add(new Command("inview.search", InviewCmd, "inview", "search", "viewinv"));
         }
-
-        private void RandomTeleport(CommandArgs args)
+        private void InviewCmd(CommandArgs args)
         {
-            TSPlayer player = args.Player;
-            if (player == null || !player.Active)
+            var player = args.Player;
+
+            if (args.Parameters.Count < 1)
             {
+                player.SendErrorMessage("Invalid Syntax! Proper Syntax: /inview <player> [inv|equip|misc...]");
+                player.SendMessage("You can view player contents using this command\n" +
+                    $"Example: /inview [c/abff96:{player.Name}] [c/96ffdc:inv] (View inventory contents)", Color.WhiteSmoke);
                 return;
             }
 
-            int x = Main.rand.Next(0, Main.maxTilesX);
-            int y = Main.rand.Next(0, Main.maxTilesY);
-            int spawnTileX = (int)WorldGen.spawnTileX;
-            int spawnTileY = (int)WorldGen.spawnTileY;
-            int maxTries = 100;
-
-            while (!CanTeleport(x, y) && maxTries > 0)
+            var players = TSPlayer.FindByNameOrID(args.Parameters[0]);
+            if (players.Count == 0)
             {
-                x = Main.rand.Next(0, Main.maxTilesX);
-                y = Main.rand.Next(0, Main.maxTilesY);
-                maxTries--;
-            }
-
-            if (maxTries == 0)
-            {
-                player.SendErrorMessage("Failed to find a safe location to teleport");
+                player.SendErrorMessage($"Could not find any players named \"{args.Parameters[0]}\"");
                 return;
             }
+            else if (players.Count > 1)
+            {
+                player.SendMultipleMatchError(players.Select(p => p.Name)); // Multiple Players
+                return;
+            }
+            //else if (player == players[0])
+            //{
+            //    // Code to return a situation of selecting yourself
+            //    return;
+            //}
+            else
+            {
 
-            player.Teleport(x * 16, y * 16);
-            player.SendSuccessMessage("Teleported to a random location");
+                if (args.Parameters.Count > 1)
+                {
+
+                    switch (args.Parameters[1])
+                    {
+                        case "inv":
+                        case "inventory":
+                            {
+                                string hotbar = "|";
+                                string inventory = "|";
+                                for (int i = 0; i < NetItem.InventorySlots; i++)
+                                {
+                                    if (i < 10)
+                                    {
+                                        hotbar = hotbar + "[i/s" + players[0].TPlayer.inventory[i].stack + ":" + players[0].TPlayer.inventory[i].netID + "]|";
+                                    }
+                                    else
+                                    if (i < NetItem.InventorySlots)
+                                    {
+                                        if (i == 20 || i == 30 || i == 40 || i == 50)
+                                        {
+                                            inventory = inventory + "[i/s" + players[0].TPlayer.inventory[i].stack + ":" + players[0].TPlayer.inventory[i].netID + "]|\n|";
+                                        }
+                                        inventory = inventory + "[i/s" + players[0].TPlayer.inventory[i].stack + ":" + players[0].TPlayer.inventory[i].netID + "]|";
+                                    }
+                                }
+                                args.Player.SendMessage($"Viewing {players[0].Name}'s Inventory:\n" +
+                                    $"{hotbar}\n" +
+                                    $"{inventory}\n" +
+                                    $"[i/s{players[0].TPlayer.trashItem.stack}:{players[0].TPlayer.trashItem.netID}]", Color.WhiteSmoke);
+                            }
+                            break;
+                        case "equip":
+                        case "equipment":
+                            {
+                                string list1 = "";
+                                string list2 = "";
+                                for (int i = 0; i < 10; i++)
+                                {
+                                    int ii = i + 10;
+                                    if (i < 3)
+                                    {
+                                        list1 = list1 + "|[i/s" + players[0].TPlayer.dye[i + 3].stack + ":" + players[0].TPlayer.dye[i + 3].netID + "]|[i/s" + players[0].TPlayer.armor[ii + 3].stack + ":" + players[0].TPlayer.armor[ii + 3].netID + "]|[i/s" + players[0].TPlayer.armor[i + 3].stack + ":" + players[0].TPlayer.armor[i + 3].netID + "]|\t\t|[i/s" + players[0].TPlayer.dye[i].stack + ":" + players[0].TPlayer.dye[i].netID + "]|[i/s" + players[0].TPlayer.armor[ii].stack + ":" + players[0].TPlayer.armor[ii].netID + "]|[i/s" + players[0].TPlayer.armor[i].stack + ":" + players[0].TPlayer.armor[i].netID + "]|\n";
+                                    }
+                                    else
+                                    {
+                                        list1 = list1 + "|[i/s" + players[0].TPlayer.dye[i].stack + ":" + players[0].TPlayer.dye[i].netID + "]|[i/s" + players[0].TPlayer.armor[ii].stack + ":" + players[0].TPlayer.armor[ii].netID + "]|[i/s" + players[0].TPlayer.armor[i].stack + ":" + players[0].TPlayer.armor[i].netID + "]|\n";
+                                    }
+                                    if (i < 5)
+                                    {
+                                        list2 = list2 + "|[i/s" + players[0].TPlayer.miscDyes[i].stack + ":" + players[0].TPlayer.miscDyes[i].netID + "]|[i/s" + players[0].TPlayer.miscEquips[i].stack + ":" + players[0].TPlayer.miscEquips[i].netID + "]|\n";
+                                    }
+                                }
+                                args.Player.SendInfoMessage($"[ {players[0].Name} ] Equipment:\n\narmor & accessory:\n{list1}\nmisc:\n{list2}", Color.Gray);
+                            }
+                            break;
+                        default:
+                            player.SendErrorMessage($"Please specify the contents to view:\n" +
+                                $"Inventory, Inv\n" +
+                                $"Equipment, Equip.");
+                            break;
+                    }
+                }
+                return;
+            }
         }
-
-        private bool CanTeleport(int x, int y)
+        public void InventoryView(CommandArgs args)
         {
-            List<Point16> points = new List<Point16>();
+            TSPlayer Player = args.Player;
 
-            // Check if the area around the teleport point is safe
-            for (int i = x - 10; i < x + 10; i++)
+            if (args.Parameters.Count != 1 && args.Parameters.Count != 2)
             {
-                for (int j = y - 10; j < y + 10; j++)
-                {
-                    if (!WorldGen.SolidTile(i, j) && !Main.tile[i, j].lava() && !Main.tile[i, j].liquid)
+                Player.SendErrorMessage("Invalid syntax. Proper syntax: /inview [inv|equipment...] <player>");
+                return;
+            }
+            if (args.Parameters.Count == 0)
+            {
+                args.Player.SendErrorMessage("Specify a player!");
+                return;
+            }
+            if (args.Parameters.Count == 1)
+            {
+                args.Player.SendErrorMessage("Specify a type! type: <inventory,equipment>");
+                return;
+            }
+            //argument /cmd <arg0> <arg1>
+            string arg0 = args.Parameters[0];
+            string arg1 = args.Parameters[1];
+            //finding player
+            var foundPlr = TSPlayer.FindByNameOrID(arg0);
+            if (foundPlr.Count == 0)
+            {
+                args.Player.SendErrorMessage("Invalid player!");
+                return;
+            }
+            var targetplayer = foundPlr[0];
+
+            switch (arg1)
+            {
+                case "help":
                     {
-                        points.Add(new Point16((short)i, (short)j));
+                        Player.SendInfoMessage("view inventory\n\n/inventoryview <Player> <type>\n\ntype: <inventory,equipment>\n\nexample:\n/inventoryview john inventory");
+                        return;
                     }
-                    else
+                case "inventory":
+                case "inv":
                     {
-                        return false;
+                        string list1 = "|";
+                        string list2 = "|";
+                        for (int i = 0; i < NetItem.InventorySlots; i++)
+                        {
+                            if (i < 10)
+                            {
+                                list1 = list1 + "[i/s" + targetplayer.TPlayer.inventory[i].stack + ":" + targetplayer.TPlayer.inventory[i].netID + "]|";
+                            }
+                            else
+                            if (i < NetItem.InventorySlots)
+                            {
+                                if (i == 20 || i == 30 || i == 40 || i == 50)
+                                {
+                                    list2 = list2 + "[i/s" + targetplayer.TPlayer.inventory[i].stack + ":" + targetplayer.TPlayer.inventory[i].netID + "]|\n|";
+                                }
+                                list2 = list2 + "[i/s" + targetplayer.TPlayer.inventory[i].stack + ":" + targetplayer.TPlayer.inventory[i].netID + "]|";
+                            }
+                        }
+                        Player.SendMessage($"[ {targetplayer.Name} ] inventory\n\nHotbar:\n{list1}\ninventory:\n{list2}\ntrashed:\n[i/s{Player.TPlayer.trashItem.stack}:{Player.TPlayer.trashItem.netID}]", Color.Gray);
+                        return;
                     }
-                }
-            }
+                case "equipment":
+                case "equip":
+                    {
+                        string list1 = "";
+                        string list2 = "";
+                        for (int i = 0; i < 10; i++)
+                        {
+                            int ii = i + 10;
+                            if (i < 3)
+                            {
+                                list1 = list1 + "|[i/s" + targetplayer.TPlayer.dye[i + 3].stack + ":" + targetplayer.TPlayer.dye[i + 3].netID + "]|[i/s" + targetplayer.TPlayer.armor[ii + 3].stack + ":" + targetplayer.TPlayer.armor[ii + 3].netID + "]|[i/s" + targetplayer.TPlayer.armor[i + 3].stack + ":" + targetplayer.TPlayer.armor[i + 3].netID + "]|\t\t|[i/s" + targetplayer.TPlayer.dye[i].stack + ":" + targetplayer.TPlayer.dye[i].netID + "]|[i/s" + targetplayer.TPlayer.armor[ii].stack + ":" + targetplayer.TPlayer.armor[ii].netID + "]|[i/s" + targetplayer.TPlayer.armor[i].stack + ":" + targetplayer.TPlayer.armor[i].netID + "]|\n";
+                            }
+                            else
+                            {
+                                list1 = list1 + "|[i/s" + targetplayer.TPlayer.dye[i].stack + ":" + targetplayer.TPlayer.dye[i].netID + "]|[i/s" + targetplayer.TPlayer.armor[ii].stack + ":" + targetplayer.TPlayer.armor[ii].netID + "]|[i/s" + targetplayer.TPlayer.armor[i].stack + ":" + targetplayer.TPlayer.armor[i].netID + "]|\n";
+                            }
+                            if (i < 5)
+                            {
+                                list2 = list2 + "|[i/s" + targetplayer.TPlayer.miscDyes[i].stack + ":" + targetplayer.TPlayer.miscDyes[i].netID + "]|[i/s" + targetplayer.TPlayer.miscEquips[i].stack + ":" + targetplayer.TPlayer.miscEquips[i].netID + "]|\n";
+                            }
+                        }
+                        Player.SendMessage($"[ {targetplayer.Name} ] Equipment:\n\narmor & accessory:\n{list1}\nmisc:\n{list2}", Color.Gray);
+                        return;
+                    }
+                default:
+                    {
+                        Player.SendErrorMessage("Invalid type! type: <inventory,equipment>");
+                        return;
+                    }
 
-            // Check if there are any players or NPCs nearby
-            foreach (TSPlayer player in TShock.Players)
-            {
-                if (player != null && player.Active && player.Distance(new Vector2(x, y) * 16) < 200f)
-                {
-                    return false;
-                }
             }
-
-            foreach (NPC npc in Main.npc)
-            {
-                if (npc.active && npc.Distance(new Vector2(x, y) * 16) < 200f)
-                {
-                    return false;
-                }
-            }
-
-            return true;
+            return;
         }
-
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
-                // Clean up any managed resources
+                // Deregister hooks here
             }
-
             base.Dispose(disposing);
         }
     }
