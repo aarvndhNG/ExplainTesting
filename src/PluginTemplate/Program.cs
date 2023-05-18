@@ -1,397 +1,187 @@
 using System;
 using System.Collections.Generic;
+using System.Data;
+using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
-using TShockAPI;
+using System.Text.RegularExpressions;
+using System.Timers;
 using Terraria;
 using TerrariaApi.Server;
-using Microsoft.Xna.Framework;
-using TShockAPI.DB;
+using TShockAPI;
 
-namespace inventorychecker
+namespace HelperBot
 {
     [ApiVersion(2, 1)]
-    public class inventoryviewers : TerrariaPlugin
+    public class HelperBot : TerrariaPlugin
     {
-        public override string Author => "Nightklp";
+        #region Plugin Info
+        public override string Name => "HelperBot";
+        public override Version Version => Assembly.GetExecutingAssembly().GetName().Version;
+        public override string Author => "Ryozuki";
+        public override string Description => "A bot with multiple utilities, such as stats gathering and a Q&A system.";
+        #endregion
 
-        public override string Description => "Plugin to view contents of a player's inventory";
+        public ConfigFile Config { get; set; } = new ConfigFile();
+        public Regex ReminderRegex { get; set; } = new Regex(@"remind me to ([\w+ ]+) in (\d+) (minutes|mins|hours|seconds|secs|days)");
 
-        public override string Name => "InView";
-
-        public override Version Version => new Version(1, 0, 0, 0);
-
-        public inventoryviewers(Main game) : base(game)
+        public HelperBot(Main game) : base(game)
         {
+        }
 
+        private void LoadConfig()
+        {
+            string path = Path.Combine(TShock.SavePath, "HelperBot.json");
+            Config = ConfigFile.Read(path);
         }
 
         public override void Initialize()
         {
-            Commands.ChatCommands.Add(new Command("inview.search", InventoryView, "inventoryview"));
-            Commands.ChatCommands.Add(new Command("inview.search", InviewCmd, "inview", "search", "viewinv"));
-            Commands.ChatCommands.Add(new Command("inview.edit", EditInventory, "editinv"));
-            Commands.ChatCommands.Add(new Command("inview.profile", ViewProfile, "profile"));
-            Commands.ChatCommands.Add(new Command("inview.profile", SetProfile, "setprofile"));
+            LoadConfig();
+            ServerApi.Hooks.GameInitialize.Register(this, OnInitialize);
+            ServerApi.Hooks.ServerChat.Register(this, OnChat, -666);
         }
 
-        private void InviewCmd(CommandArgs args)
+        protected override void Dispose(bool disposing)
         {
-            var player = args.Player;
-
-            if (args.Parameters.Count < 1)
+            if (disposing)
             {
-                player.SendErrorMessage("Invalid Syntax! Proper Syntax: /inview <player> [inv|equip|misc...]");
-                player.SendMessage("You can view player contents using this command\n" +
-                    $"Example: /inview [c/abff96:{player.Name}] [c/96ffdc:inv] (View inventory contents)", Color.WhiteSmoke);
-                return;
+                ServerApi.Hooks.GameInitialize.Deregister(this, OnInitialize);
             }
-
-            var players = TSPlayer.FindByNameOrID(args.Parameters[0]);
-            if (players.Count == 0)
-            {
-                player.SendErrorMessage($"Could not find any players named \"{args.Parameters[0]}\"");
-                return;
-            }
-            else if (players.Count > 1)
-            {
-                player.SendMultipleMatchError(players.Select(p => p.Name)); // Multiple Players
-                return;
-            }
-            else
-            {
-                if (args.Parameters.Count > 1)
-                {
-                    switch (args.Parameters[1])
-                    {
-                        case "inv":
-                        case "inventory":
-                            {
-                                string hotbar = "|";
-                                string inventory = "|";
-                                for (int i = 0; i < NetItem.InventorySlots; i++)
-                                {
-                                    if (i < 10)
-                                    {
-                                        hotbar = hotbar + "[i/s" + players[0].TPlayer.inventory[i].stack + ":" + players[0].TPlayer.inventory[i].netID + "]|";
-                                    }
-                                    else if (i < NetItem.InventorySlots)
-                                    {
-                                        if (i == 20 || i == 30 || i == 40 || i == 50)
-                                        {
-                                            inventory = inventory + "[i/s" + players[0].TPlayer.inventory[i].stack + ":" + players[0].TPlayer.inventory[i].netID + "]|\n|";
-                                        }
-                                        inventory = inventory + "[i/s" + players[0].TPlayer.inventory[i].stack + ":" + players[0].TPlayer.inventory[i].netID + "]|";
-                                    }
-                                }
-                                args.Player.SendMessage($"Viewing {players[0].Name}'s Inventory:\n" +
-                                    $"{hotbar}\n" +
-                                    $"{inventory}\n" +
-                                    $"[i/s{players[0].TPlayer.trashItem.stack}:{players[0].TPlayer.trashItem.netID}] (Trash)", Color.Aquamarine);
-                                break;
-                            }
-                        case "equip":
-                        case "equipment":
-                            {
-                                string armor = $"Armor: [i/s{players[0].TPlayer.armor[0].stack}:{players[0].TPlayer.armor[0].netID}] (Head) " +
-                                    $"[i/s{players[0].TPlayer.armor[1].stack}:{players[0].TPlayer.armor[1].netID}] (Chest) " +
-                                    $"[i/s{players[0].TPlayer.armor[2].stack}:{players[0].TPlayer.armor[2].netID}] (Legs) " +
-                                    $"[i/s{players[0].TPlayer.armor[3].stack}:{players[0].TPlayer.armor[3].netID}] (Accessory) " +
-                                    $"[i/s{players[0].TPlayer.armor[4].stack}:{players[0].TPlayer.armor[4].netID}] (Accessory) " +
-                                    $"[i/s{players[0].TPlayer.armor[5].stack}:{players[0].TPlayer.armor[5].netID}] (Accessory) " +
-                                    $"[i/s{players[0].TPlayer.armor[6].stack}:{players[0].TPlayer.armor[6].netID}] (Accessory) " +
-                                    $"[i/s{players[0].TPlayer.armor[7].stack}:{players[0].TPlayer.armor[7].netID}] (Accessory) " +
-                                    $"[i/s{players[0].TPlayer.armor[8].stack}:{players[0].TPlayer.armor[8].netID}] (Accessory) " +
-                                    $"[i/s{players[0].TPlayer.armor[9].stack}:{players[0].TPlayer.armor[9].netID}] (Accessory) " +
-                                    $"[i/s{players[0].TPlayer.armor[10].stack}:{players[0].TPlayer.armor[10].netID}] (Accessory)\n";
-                                string dye = $"Dye: [i/s{players[0].TPlayer.dye[0].stack}:{players[0].TPlayer.dye[0].netID}] (Head) " +
-                                    $"[i/s{players[0].TPlayer.dye[1].stack}:{players[0].TPlayer.dye[1].netID}] (Chest) " +
-                                    $"[i/s{players[0].TPlayer.dye[2].stack}:{players[0].TPlayer.dye[2].netID}] (Legs) " +
-                                    $"[i/s{players[0].TPlayer.dye[3].stack}:{players[0].TPlayer.dye[3].netID}] (Accessory) " +
-                                    $"[i/s{players[0].TPlayer.dye[4].stack}:{players[0].TPlayer.dye[4].netID}] (Accessory) " +
-                                    $"[i/s{players[0].TPlayer.dye[5].stack}:{players[0].TPlayer.dye[5].netID}] (Accessory) " +
-                                    $"[i/s{players[0].TPlayer.dye[6].stack}:{players[0].TPlayer.dye[6].netID}] (Accessory) " +
-                                    $"[i/s{players[0].TPlayer.dye[7].stack}:{players[0].TPlayer.dye[7].netID}] (Accessory) " +
-                                    $"[i/s{players[0].TPlayer.dye[8].stack}:{players[0].TPlayer.dye[8].netID}] (Accessory) " +
-                                    $"[i/s{players[0].TPlayer.dye[9].stack}:{players[0].TPlayer.dye[9].netID}] (Accessory) " +
-                                    $"[i/s{players[0].TPlayer.dye[10].stack}:{players[0].TPlayer.dye[10].netID}] (Accessory)\n";
-                                string miscEquips = $"Misc Equip: [i/s{players[0].TPlayer.miscEquips[0].stack}:{players[0].TPlayer.miscEquips[0].netID}] " +
-                                    $"[i/s{players[0].TPlayer.miscEquips[1].stack}:{players[0].TPlayer.miscEquips[1].netID}] " +
-                                    $"[i/s{players[0].TPlayer.miscEquips[2].stack}:{players[0].TPlayer.miscEquips[2].netID}] " +
-                                    $"[i/s{players[0].TPlayer.miscEquips[3].stack}:{players[0].TPlayer.miscEquips[3].netID}] " +
-                                    $"[i/s{players[0].TPlayer.miscEquips[4].stack}:{players[0].TPlayer.miscEquips[4].netID}]\n";
-                                args.Player.SendMessage($"Viewing {players[0].Name}'s Equipment:\n" +
-                                    $"{armor}\n" +
-                                    $"{dye}\n" +
-                                    $"{miscEquips}", Color.Aquamarine);
-                                break;
-                            }
-                        case "misc":
-                        case "miscellaneous":
-                            {
-                                string coins = $"Coins: [i/s{players[0].TPlayer.bank.item[49].stack}:{players[0].TPlayer.bank.item[49].netID}] (Platinum) " +
-                                    $"[i/s{players[0].TPlayer.bank.item[48].stack}:{players[0].TPlayer.bank.item[48].netID}] (Gold) " +
-                                    $"[i/s{players[0].TPlayer.bank.item[47].stack}:{players[0].TPlayer.bank.item[47].netID}] (Silver) " +
-                                    $"[i/s{players[0].TPlayer.bank.item[46].stack}:{players[0].TPlayer.bank.item[46].netID}] (Copper)\n";
-                                string safe = $"Safe: [i/s{players[0].TPlayer.bank.item[40].stack}:{players[0].TPlayer.bank.item[40].netID}] " +
-                                    $"[i/s{players[0].TPlayer.bank.item[41].stack}:{players[0].TPlayer.bank.item[41].netID}] " +
-                                    $"[i/s{players[0].TPlayer.bank.item[42].stack}:{players[0].TPlayer.bank.item[42].netID}] " +
-                                    $"[i/s{players[0].TPlayer.bank.item[43].stack}:{players[0].TPlayer.bank.item[43].netID}] " +
-                                    $"[i/s{players[0].TPlayer.bank.item[44].stack}:{players[0].TPlayer.bank.item[44].netID}] " +
-                                    $"[i/s{players[0].TPlayer.bank.item[45].stack}:{players[0].TPlayer.bank.item[45].netID}]\n";
-                                string forge = $"Forge: [i/s{players[0].TPlayer.bank.item[39].stack}:{players[0].TPlayer.bank.item[39].netID}] " +
-                                    $"[i/s{players[0].TPlayer.bank.item[38].stack}:{players[0].TPlayer.bank.item[38].netID}] " +
-                                    $"[i/s{players[0].TPlayer.bank.item[37].stack}:{players[0].TPlayer.bank.item[37].netID}] " +
-                                    $"[i/s{players[0].TPlayer.bank.item[36].stack}:{players[0].TPlayer.bank.item[36].netID}]\n";
-                                args.Player.SendMessage($"Viewing {players[0].Name}'s Miscellaneous Items:\n" +
-                                    $"{coins}\n" +
-                                    $"{safe}\n" +
-                                    $"{forge}", Color.Aquamarine);
-                                break;
-                            }
-                        default:
-                            {
-                                player.SendErrorMessage("Invalid item type! Available types: inv, equip, misc");
-                                return;
-                            }
-                    }
-                }
-                else
-                {
-                    string hotbar = "|";
-                    string inventory = "|";
-                    for (int i = 0; i < NetItem.InventorySlots; i++)
-                    {
-                        if (i < 10)
-                        {
-                            hotbar = hotbar + "[i/s" + players[0].TPlayer.inventory[i].stack + ":" + players[0].TPlayer.inventory[i].netID + "]|";
-                        }
-                        else if (i < NetItem.InventorySlots)
-                        {
-                            if (i == 20 || i == 30 || i == 40 || i == 50)
-                            {
-                                inventory = inventory + "[i/s" + players[0].TPlayer.inventory[i].stack + ":" + players[0].TPlayer.inventory[i].netID + "]|\n|";
-                            }
-                            inventory = inventory + "[i/s" + players[0].TPlayer.inventory[i].stack + ":" + players[0].TPlayer.inventory[i].netID + "]|";
-                        }
-                    }
-                    args.Player.SendMessage($"Viewing {players[0].Name}'s Inventory:\n" +
-                        $"{hotbar}\n" +
-                        $"{inventory}\n" +
-                        $"[i/s{players[0].TPlayer.trashItem.stack}:{players[0].TPlayer.trashItem.netID}] (Trash)", Color.Aquamarine);
-                }
-            }
+            base.Dispose(disposing);
         }
 
-        private void EditInventory(CommandArgs args)
+        #region Hooks
+        private void OnInitialize(EventArgs args)
         {
-            var player = args.Player;
-
-            if (args.Parameters.Count < 2)
+            Commands.ChatCommands.Add(new Command("helperbot.cmds", CommandHandler, Config.BaseCommandName)
             {
-                player.SendErrorMessage("Invalid Syntax! Proper Syntax: /editinv <player> <slot> <itemID> [stack]");
-                return;
-            }
-
-            var players = TSPlayer.FindByNameOrID(args.Parameters[0]);
-            if (players.Count == 0)
-            {
-                player.SendErrorMessage($"Could not find any players named \"{args.Parameters[0]}\"");
-                return;
-            }
-            else if (players.Count > 1)
-            {
-                player.SendMultipleMatchError(players.Select(p => p.Name)); // Multiple Players
-                return;
-            }
-
-            if (!int.TryParse(args.Parameters[1], out int slot))
-            {
-                player.SendErrorMessage("Invalid slot number!");
-                return;
-            }
-
-            if (!int.TryParse(args.Parameters[2], out int itemID))
-            {
-                player.SendErrorMessage("Invalid item ID!");
-                return;
-            }
-
-            if (slot < 0 || slot >= NetItem.InventorySlots)
-            {
-                player.SendErrorMessage("Invalid slot number! Slot must be between 0 and 49.");
-                return;
-            }
-
-            var stack = 1;
-            if (args.Parameters.Count >= 4)
-            {
-                if (!int.TryParse(args.Parameters[3], out stack))
-                {
-                    player.SendErrorMessage("Invalid stack number!");
-                    return;
-                }
-                if (stack < 1 || stack > Main.maxStack)
-                {
-                    player.SendErrorMessage($"Stack size must be between 1 and {Main.maxStack}.");
-                    return;
-                }
-            }
-
-            players[0].TPlayer.inventory[slot].SetDefaults(itemID);
-            players[0].TPlayer.inventory[slot].stack = stack;
-            players[0].SendData(PacketTypes.PlayerSlot, "", players[0].Index, slot);
-            player.SendMessage($"Modified {players[0].Name}'s inventory at slot {slot} to item ID {itemID} with stack {stack}.", Color.Aquamarine);
+                HelpText = $"Usage: {TShock.Config.CommandSpecifier}{Config.BaseCommandName} <command>"
+            });
         }
 
-        private void ViewProfile(CommandArgs args)
+        private void OnChat(ServerChatEventArgs e)
         {
-            var player = args.Player;
+            string msg = e.Text;
 
-            if (args.Parameters.Count < 1)
-            {
-                player.SendErrorMessage("Invalid Syntax! Proper Syntax: /profile <player>");
-                return;
-            }
+            var ply = TShock.Players[e.Who];
 
-            var players = TSPlayer.FindByNameOrID(args.Parameters[0]);
-            if (players.Count == 0)
-            {
-                player.SendErrorMessage($"Could not find any players named \"{args.Parameters[0]}\"");
+            if (ply == null)
                 return;
-            }
-            else if (players.Count > 1)
-            {
-                player.SendMultipleMatchError(players.Select(p => p.Name)); // Multiple Players
-                return;
-            }
 
-            player.SendMessage($"Viewing {players[0].Name}'s Profile:", Color.Aquamarine);
-            player.SendMessage($"- HP: {players[0].TPlayer.statLife}/{players[0].TPlayer.statLifeMax}", Color.Aquamarine);
-            player.SendMessage($"- Mana: {players[0].TPlayer.statMana}/{players[0].TPlayer.statManaMax}", Color.Aquamarine);
-            player.SendMessage($"- Defense: {players[0].TPlayer.statDefense}", Color.Aquamarine);
-            player.SendMessage($"- Damage: {players[0].TPlayer.HeldItem.damage}", Color.Aquamarine);
-            player.SendMessage($"- Crit Chance: {players[0].TPlayer.meleeCrit}/{players[0].TPlayer.rangedCrit}/{players[0].TPlayer.magicCrit}/{players[0].TPlayer.thrownCrit} (Melee/Ranged/Magic/Thrown)", Color.Aquamarine);
-            player.SendMessage($"- Movement Speed: {players[0].TPlayer.moveSpeed}", Color.Aquamarine);
-            player.SendMessage($"- Jump Height: {players[0].TPlayer.jump}", Color.Aquamarine);
+            msg = msg.ToLower();
+
+            if (Config.QuestionsAndAnswers.Any(x => Regex.Match(msg.ToLower(), x.Question.ToLower()).Success))
+            {
+                var answer = Config.QuestionsAndAnswers.Find(x => Regex.Match(msg.ToLower(), x.Question.ToLower()).Success)?.Answer;
+
+                TShockAPI.Utils.Broadcast($"{Config.BotName}: {answer}", (byte)Config.BotColor[0], (byte)Config.BotColor[1], (byte)Config.BotColor[2]);
+            }
+            else if (msg.Contains("how much is"))
+            {
+                int index = msg.LastIndexOf('s');
+                string op = msg.Substring(index + 1);
+                op = op.Replace("?", "");
+
+                try
+                {
+                    double result = Convert.ToDouble(new DataTable().Compute(op, null));
+                    TShockAPI.Utils.Broadcast($"{Config.BotName}: The result is: {result}", (byte)Config.BotColor[0], (byte)Config.BotColor[1], (byte)Config.BotColor[2]);
+                }
+                catch (System.Data.EvaluateException)
+                {
+                    // invalid operation
+                }
+                catch (System.Data.SyntaxErrorException)
+                {
+                    // invalid operation
+                }
+            }
+            else if (ReminderRegex.IsMatch(msg) && ply.HasPermission("helperbot.remind"))
+            {
+                Match m = ReminderRegex.Match(msg);
+
+                string what = m.Groups[1].Value;
+                float time = float.Parse(m.Groups[2].Value);
+                string time_unit = m.Groups[3].Value;
+
+                if (time_unit == "mins")
+                    time_unit = "minutes";
+                if (time_unit == "secs")
+                    time_unit = "seconds";
+
+                TShockAPI.Utils.Broadcast($"{Config.BotName}: {ply.Name} I'll remind you to {what} in {time} {time_unit}", (byte)Config.BotColor[0], (byte)Config.BotColor[1], (byte)Config.BotColor[2]);
+
+                if (time_unit == "days")
+                    time *= 24 * 3600 * 1000;
+                if (time_unit == "hours")
+                    time *= 3600 * 1000;
+                else if (time_unit == "minutes")
+                    time *= 60 * 1000;
+                else if (time_unit == "seconds")
+                    time *= 1000;
+
+                Timer timer = new Timer(time);
+                timer.Elapsed += (sender, ee) => TShockAPI.Utils.Broadcast($"{Config.BotName}: {ply.Name} remember to {what}", (byte)Config.BotColor[0], (byte)Config.BotColor[1], (byte)Config.BotColor[2]);
+                timer.AutoReset = false;
+                timer.Start();
+            }
         }
+        #endregion
 
-        private void SetProfile(CommandArgs args)
+        #region Commands
+        private void CommandHandler(CommandArgs e)
         {
-            var player = args.Player;
-
-            if (args.Parameters.Count < 3)
-            {
-                player.SendErrorMessage("Invalid Syntax! Proper Syntax: /setprofile <player> <property> <value>");
+            if (!Config.EnableBotCommands)
                 return;
+
+            var ply = e.Player;
+            var cmd = "";
+
+            if (e.Parameters.Count != 0)
+            {
+                cmd = e.Parameters[0];
             }
 
-            var players = TSPlayer.FindByNameOrID(args.Parameters[0]);
-            if (players.Count == 0)
+            var args = e.Parameters.Skip(1).ToArray();
+
+            switch (cmd.ToLower())
             {
-                player.SendErrorMessage($"Could not find any players named \"{args.Parameters[0]}\"");
-                return;
-            }
-            else if (players.Count > 1)
-            {
-                player.SendMultipleMatchError(players.Select(p => p.Name)); // Multiple Players
-                return;
-            }
-
-            var property = args.Parameters[1].ToLower();
-            var value = args.Parameters[2];
-
-            switch (property)
-            {
-                case "hp":
-                case "health":
-                    if (!int.TryParse(value, out int health))
+                case "register":
+                    if (args.Length < 1)
                     {
-                        player.SendErrorMessage("Invalid value for health!");
+                        ply.SendErrorMessage("Usage: {0}register <password>", TShock.Config.CommandSpecifier);
                         return;
                     }
-                    players[0].TPlayer.statLife = health;
-                    players[0].SendData(PacketTypes.PlayerHp, "", players[0].Index);
-                    player.SendMessage($"Modified {players[0].Name}'s health to {health}.", Color.Aquamarine);
+
+                    if (ply.User != null)
+                    {
+                        ply.SendErrorMessage("You are already registered.");
+                        return;
+                    }
+
+                    var registerPassword = args[0];
+
+                    if (ply.Register(registerPassword))
+                    {
+                        ply.SendSuccessMessage("You have successfully registered.");
+                    }
+                    else
+                    {
+                        ply.SendErrorMessage("Registration failed.");
+                    }
                     break;
 
-                case "mana":
-                    if (!int.TryParse(value, out int mana))
-                    {
-                        player.SendErrorMessage("Invalid value for mana!");
-                        return;
-                    }
-                    players[0].TPlayer.statMana = mana;
-                    players[0].SendData(PacketTypes.PlayerMana, "", players[0].Index);
-                    player.SendMessage($"Modified {players[0].Name}'s mana to {mana}.", Color.Aquamarine);
-                    break;
-
-                case "defense":
-                    if (!int.TryParse(value, out int defense))
-                    {
-                        player.SendErrorMessage("Invalid value for defense!");
-                        return;
-                    }
-                    players[0].TPlayer.statDefense = defense;
-                    players[0].SendData(PacketTypes.PlayerInfo, "", players[0].Index);
-                    player.SendMessage($"Modified {players[0].Name}'s defense to {defense}.", Color.Aquamarine);
-                    break;
-
-                case "damage":
-                    if (!int.TryParse(value, out int damage))
-                    {
-                        player.SendErrorMessage("Invalid value for damage!");
-                        return;
-                    }
-                    players[0].TPlayer.HeldItem.damage = damage;
-                    players[0].SendData(PacketTypes.PlayerSlot, "", players[0].Index, players[0].TPlayer.selectedItem);
-                    player.SendMessage($"Modified {players[0].Name}'s damage to {damage}.", Color.Aquamarine);
-                    break;
-
-                case "crit":
-                case "critchance":
-                    var critValues = value.Split('/');
-                    if (critValues.Length != 4 || !int.TryParse(critValues[0], out int meleeCrit) || !int.TryParse(critValues[1], out int rangedCrit) || !int.TryParse(critValues[2], out int magicCrit) || !int.TryParse(critValues[3], out int thrownCrit))
-                    {
-                        player.SendErrorMessage("Invalid value for critical chance! Proper Syntax: <meleeCrit>/<rangedCrit>/<magicCrit>/<thrownCrit>");
-                        return;
-                    }
-                    players[0].TPlayer.meleeCrit = meleeCrit;
-                    players[0].TPlayer.rangedCrit = rangedCrit;
-                    players[0].TPlayer.magicCrit = magicCrit;
-                    players[0].TPlayer.thrownCrit = thrownCrit;
-                    players[0].SendData(PacketTypes.PlayerHurtV2, "", players[0].Index);
-                    player.SendMessage($"Modified {players[0].Name}'s critical chance to {meleeCrit}/{rangedCrit}/{magicCrit}/{thrownCrit} (Melee/Ranged/Magic/Thrown).", Color.Aquamarine);
-                    break;
-
-                case "movespeed":
-                case "movementspeed":
-                    if (!float.TryParse(value, out float moveSpeed))
-                    {
-                        player.SendErrorMessage("Invalid value for movement speed!");
-                        return;
-                    }
-                    players[0].TPlayer.moveSpeed = moveSpeed;
-                    players[0].SendData(PacketTypes.PlayerUpdate, "", players[0].Index);
-                    player.SendMessage($"Modified {players[0].Name}'s movement speed to {moveSpeed}.", Color.Aquamarine);
-                    break;
-
-                case "jump":
-                case "jumpheight":
-                    if (!int.TryParse(value, out int jumpHeight))
-                    {
-                        player.SendErrorMessage("Invalid value for jump height!");
-                        return;
-                    }
-                    players[0].TPlayer.jump = jumpHeight;
-                    players[0].SendData(PacketTypes.PlayerUpdate, "", players[0].Index);
-                    player.SendMessage($"Modified {players[0].Name}'s jump height to {jumpHeight}.", Color.Aquamarine);
+                case "spawn":
+                    ply.Teleport(TShock.Players.FirstOrDefault(p => p?.IsLoggedIn == true)?.TileX ?? 0 * 16, TShock.Players.FirstOrDefault(p => p?.IsLoggedIn == true)?.TileY ?? 0 * 16);
                     break;
 
                 default:
-                    player.SendErrorMessage("Invalid property! Available properties: hp, mana, defense, damage, crit, movespeed, jump");
-                    return;
+                    ply.SendErrorMessage("Invalid command. Type {0}help {1} for a list of available commands.", TShock.Config.CommandSpecifier, Config.BaseCommandName);
+                    break;
             }
         }
+        #endregion
     }
 }
