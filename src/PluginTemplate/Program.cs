@@ -55,6 +55,47 @@ namespace SocialFeatures
             }
         }
         
+        private void NPCLoot(NpcLootEventArgs args)
+        {
+            // Check if the killer is a player and has a valid profile
+            if (args.Player != null && playerProfiles.ContainsKey(args.Player.Name))
+            {
+                int currencyReward = 0;
+
+                // Determine the currency reward based on the NPC's type or ID
+                switch (args.Npc.type)
+                {
+                    // Example: Reward 10 currency for killing a slime//
+                    case NPCID.BlueSlime:
+                    case NPCID.GreenSlime:
+                    case NPCID.RedSlime:
+                        currencyReward = 10;
+                        break;
+
+                    // Example: Reward 50 currency for killi
+                    case NPCID.EyeofCthulhu:
+                    case NPCID.EaterofWorldsHead:
+                    case NPCID.BrainofCthulhu:
+                        currencyReward = 50;
+                        break;
+
+                    // Add more cases for other NPCs as needed
+
+                    default:
+                        // No currency reward for other NPCs
+                        break;
+                }
+
+                // Add the currency reward to the player's balance
+                if (currencyReward > 0)
+                {
+                    string playerName = args.Player.Name;
+                    playerCurrency[playerName] += currencyReward;
+                    args.Player.SendSuccessMessage($"You received {currencyReward} currency for defeating the {args.Npc.FullName}.");
+                }
+            }
+        }
+        
         private void ProfileCommand(CommandArgs args)
         {
             string playerName = args.Player.Name;
