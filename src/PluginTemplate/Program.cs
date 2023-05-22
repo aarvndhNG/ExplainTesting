@@ -5,111 +5,65 @@ using Newtonsoft.Json;
 using Terraria;
 using TerrariaApi.Server;
 using TShockAPI;
+using TShockAPI.Hooks;
 
-namespace SocialFeatures
+namespace YourNamespace
 {
     [ApiVersion(2, 1)]
-    public class SocialFeaturesPlugin : TerrariaPlugin
+    public class SocialFeatures : TerrariaPlugin
     {
-        private Dictionary<string, UserProfile> playerProfiles;
-        private Dictionary<string, List<string>> friendLists;
-        private Dictionary<string, int> playerScores;
-        private Dictionary<string, int> playerCurrency;
-
         public override string Name => "SocialFeatures";
-        public override string Author => "YourName";
-        public override string Description => "Adds social features to your TShock server.";
         public override Version Version => new Version(1, 0, 0);
+        public override string Author => "YourName";
+        public override string Description => "Social features for your TShock server.";
 
+        private Dictionary<string, UserProfile> playerProfiles;
+        private Dictionary<string, int> playerCurrency;
         private Config config;
 
-        public SocialFeaturesPlugin(Main game) : base(game)
+        public SocialFeatures(Main game) : base(game)
         {
-            playerProfiles = new Dictionary<string, UserProfile>();
-            friendLists = new Dictionary<string, List<string>>();
-            playerScores = new Dictionary<string, int>();
-            playerCurrency = new Dictionary<string, int>();
-
-            config = new Config();
         }
 
         public override void Initialize()
         {
             PlayerHooks.PlayerPostLogin += OnPlayerPostLogin;
-            ServerApi.Hooks.NetGreetPlayer.Register(this, OnNetGreetPlayer);
             NPC.NPCLoot += NPCLoot;
             Commands.ChatCommands.Add(new Command("profile", ProfileCommand, "profile"));
             Commands.ChatCommands.Add(new Command("friend", FriendCommand, "friend"));
             Commands.ChatCommands.Add(new Command("globalchat", GlobalChatCommand, "globalchat"));
-            Commands.ChatCommands.Add(new Command("currency.admin", AddCurrencyCommand, "addcurrency"));
-            Commands.ChatCommands.Add(new Command("currency.admin", RemoveCurrencyCommand, "removecurrency"));
-            Commands.ChatCommands.Add(new Command("currency", CheckCurrencyCommand, "checkcurrency"));
-            Commands.ChatCommands.Add(new Command("currency.admin", GiveCurrencyCommand, "givecurrency"));
+            Commands.ChatCommands.Add(new Command("currency.add", AddCurrencyCommand, "addcurrency"));
+            Commands.ChatCommands.Add(new Command("currency.remove", RemoveCurrencyCommand, "removecurrency"));
+            Commands.ChatCommands.Add(new Command("currency.check", CheckCurrencyCommand, "checkcurrency"));
+            Commands.ChatCommands.Add(new Command("currency.give", GiveCurrencyCommand, "givecurrency"));
+
+            config = Config.Read();
+            playerProfiles = new Dictionary<string, UserProfile>();
+            playerCurrency = new Dictionary<string, int>();
+
             Config.Load();
         }
 
         private void OnPlayerPostLogin(PlayerPostLoginEventArgs args)
         {
             string playerName = args.Player.Name;
-
-            // Create player profile if it doesn't exist
             if (!playerProfiles.ContainsKey(playerName))
             {
-                playerProfiles[playerName] = new UserProfile(playerName);
-                friendLists[playerName] = new List<string>();
-                playerScores[playerName] = 0;
-                playerCurrency[playerName] = config.InitialCurrency; // Set initial currency balance from config
-            }
-        }
-
-        private void OnNetGreetPlayer(GreetPlayerEventArgs args)
-        {
-            string playerName = TShock.Players[args.Who].Name;
-
-            if (playerProfiles.ContainsKey(playerName))
-            {
-                args.Handled = true;
-                TShock.Players[args.Who].SendMessage($"Welcome back, {playerName}!", Color.Yellow);
+                playerProfiles.Add(playerName, new UserProfile(playerName));
+                playerCurrency.Add(playerName, config.InitialCurrency);
             }
         }
 
         private void NPCLoot(NpcLootEventArgs args)
         {
-            // Check if the killer is a player and has a valid profile
-            if (args.Player != null && playerProfiles.ContainsKey(args.Player.Name))
+            int currencyAmount = 10; // Adjust the amount of currency given for killing an NPC here
+            if (args.Npc != null && args.Npc.active && args.Npc.value > 0 && args.Npc.value >= currencyAmount)
             {
-                int currencyReward = 0;
-
-                // Determine the currency reward based on the NPC's type or ID
-                switch (args.Npc.type)
+                string playerName = Main.player[args.Npc.target].name;
+                if (playerProfiles.ContainsKey(playerName))
                 {
-                    // Example: Reward 10 currency for killing a slime
-                    case NPCID.BlueSlime:
-                    case NPCID.GreenSlime:
-                    case NPCID.RedSlime:
-                        currencyReward = 10;
-                        break;
-
-                    // Example: Reward 50 currency for killing a boss
-                    case NPCID.EyeofCthulhu:
-                    case NPCID.EaterofWorldsHead:
-                    case NPCID.BrainofCthulhu:
-                        currencyReward = 50;
-                        break;
-
-                    // Add more cases for other NPCs as needed
-
-                    default:
-                        // No currency reward for other NPCs
-                        break;
-                }
-
-                // Add the currency reward to the player's balance
-                if (currencyReward > 0)
-                {
-                    string playerName = args.Player.Name;
-                    playerCurrency[playerName] += currencyReward;
-                    args.Player.SendSuccessMessage($"You received {currencyReward} currency for defeating the {args.Npc.FullName}.");
+                    playerCurrency[playerName] += currencyAmount;
+                    TShock.Players[args.Npc.target].SendSuccessMessage($"You received {currencyAmount} {config.CurrencySymbol} for killing the NPC.");
                 }
             }
         }
@@ -246,51 +200,61 @@ namespace SocialFeatures
 
         private void AddCurrencyCommand(CommandArgs args)
         {
+            if (!args.Player.HasPermission("currency.add"))
+            {
+                args.Player.SendErrorMessage("You do not have permission to use this command.");
+                return;
+            }
+
             if (args.Parameters.Count < 2)
             {
-                args.Player.SendErrorMessage("Invalid syntax! Usage: /addcurrency <player> <amount>");
+                args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /addcurrency <player> <amount>");
                 return;
             }
 
             string playerName = args.Parameters[0];
-            int amount;
-
-            if (!int.TryParse(args.Parameters[1], out amount))
+            if (!playerCurrency.ContainsKey(playerName))
             {
-                args.Player.SendErrorMessage("Invalid amount specified.");
+                args.Player.SendErrorMessage("Invalid player specified.");
                 return;
             }
 
-            if (!playerProfiles.ContainsKey(playerName))
+            int amount;
+            if (!int.TryParse(args.Parameters[1], out amount) || amount <= 0)
             {
-                args.Player.SendErrorMessage($"Profile for '{playerName}' does not exist.");
+                args.Player.SendErrorMessage("Invalid amount specified.");
                 return;
             }
 
             playerCurrency[playerName] += amount;
-            args.Player.SendSuccessMessage($"Added {amount} {config.CurrencySymbol} to '{playerName}'s balance.");
+            args.Player.SendSuccessMessage($"Added {amount} {config.CurrencySymbol} to '{playerName}'.");
         }
 
         private void RemoveCurrencyCommand(CommandArgs args)
         {
+            if (!args.Player.HasPermission("currency.remove"))
+            {
+                args.Player.SendErrorMessage("You do not have permission to use this command.");
+                return;
+            }
+
             if (args.Parameters.Count < 2)
             {
-                args.Player.SendErrorMessage("Invalid syntax! Usage: /removecurrency <player> <amount>");
+                args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /removecurrency <player> <amount>");
                 return;
             }
 
             string playerName = args.Parameters[0];
-            int amount;
-
-            if (!int.TryParse(args.Parameters[1], out amount))
+            if (!playerCurrency.ContainsKey(playerName))
             {
-                args.Player.SendErrorMessage("Invalid amount specified.");
+                args.Player.SendErrorMessage("Invalid player specified.");
                 return;
             }
 
-            if (!playerProfiles.ContainsKey(playerName))
+            int amount;
+            if (!int.TryParse(args.Parameters[1], out amount) || amount <= 0)
             {
-                args.Player.SendErrorMessage($"Profile for '{playerName}' does not exist.");
+                args.Player.SendErrorMessage("Invalid amount specified.");
                 return;
             }
 
@@ -301,60 +265,72 @@ namespace SocialFeatures
             }
 
             playerCurrency[playerName] -= amount;
-            args.Player.SendSuccessMessage($"Removed {amount} {config.CurrencySymbol} from '{playerName}'s balance.");
+            args.Player.SendSuccessMessage($"Removed {amount} {config.CurrencySymbol} from '{playerName}'.");
         }
 
         private void CheckCurrencyCommand(CommandArgs args)
         {
-            string playerName = args.Player.Name;
-
-            if (args.Parameters.Count > 0)
+            if (!args.Player.HasPermission("currency.check"))
             {
-                playerName = args.Parameters[0];
-
-                if (!playerProfiles.ContainsKey(playerName))
-                {
-                    args.Player.SendErrorMessage($"Profile for '{playerName}' does not exist.");
-                    return;
-                }
+                args.Player.SendErrorMessage("You do not have permission to use this command.");
+                return;
             }
 
-            args.Player.SendInfoMessage($"--- Currency Balance for {playerName} ---");
-            args.Player.SendInfoMessage($"{playerCurrency[playerName]} {config.CurrencySymbol}");
-        }
-
-        private void GiveCurrencyCommand(CommandArgs args)
-        {
-            if (args.Parameters.Count < 2)
+            if (args.Parameters.Count < 1)
             {
-                args.Player.SendErrorMessage("Invalid syntax! Usage: /givecurrency <player> <amount>");
+                args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /checkcurrency <player>");
                 return;
             }
 
             string playerName = args.Parameters[0];
-            int amount;
+            if (!playerCurrency.ContainsKey(playerName))
+            {
+                args.Player.SendErrorMessage("Invalid player specified.");
+                return;
+            }
 
-            if (!int.TryParse(args.Parameters[1], out amount))
+            int currency = playerCurrency[playerName];
+            args.Player.SendInfoMessage($"'{playerName}' has {currency} {config.CurrencySymbol}.");
+        }
+
+        private void GiveCurrencyCommand(CommandArgs args)
+        {
+            if (!args.Player.HasPermission("currency.give"))
+            {
+                args.Player.SendErrorMessage("You do not have permission to use this command.");
+                return;
+            }
+
+            if (args.Parameters.Count < 2)
+            {
+                args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /givecurrency <player> <amount>");
+                return;
+            }
+
+            string playerName = args.Parameters[0];
+            if (!playerCurrency.ContainsKey(playerName))
+            {
+                args.Player.SendErrorMessage("Invalid player specified.");
+                return;
+            }
+
+            int amount;
+            if (!int.TryParse(args.Parameters[1], out amount) || amount <= 0)
             {
                 args.Player.SendErrorMessage("Invalid amount specified.");
                 return;
             }
 
-            if (!playerProfiles.ContainsKey(playerName))
-            {
-                args.Player.SendErrorMessage($"Profile for '{playerName}' does not exist.");
-                return;
-            }
-
             if (amount > playerCurrency[args.Player.Name])
             {
-                args.Player.SendErrorMessage("You don't have enough currency.");
+                args.Player.SendErrorMessage("You do not have enough currency.");
                 return;
             }
 
             playerCurrency[args.Player.Name] -= amount;
             playerCurrency[playerName] += amount;
-            args.Player.SendSuccessMessage($"Gave {amount} {config.CurrencySymbol} to '{playerName}'.");
+
+            args.Player.SendSuccessMessage($"You gave {amount} {config.CurrencySymbol} to '{playerName}'.");
         }
 
         protected override void Dispose(bool disposing)
@@ -362,64 +338,76 @@ namespace SocialFeatures
             if (disposing)
             {
                 PlayerHooks.PlayerPostLogin -= OnPlayerPostLogin;
-                ServerApi.Hooks.NetGreetPlayer.Deregister(this, OnNetGreetPlayer);
                 NPC.NPCLoot -= NPCLoot;
-                Commands.ChatCommands.RemoveAll(x => x.HasAlias("profile"));
-                Commands.ChatCommands.RemoveAll(x => x.HasAlias("friend"));
-                Commands.ChatCommands.RemoveAll(x => x.HasAlias("globalchat"));
-                Commands.ChatCommands.RemoveAll(x => x.HasAlias("addcurrency"));
-                Commands.ChatCommands.RemoveAll(x => x.HasAlias("removecurrency"));
-                Commands.ChatCommands.RemoveAll(x => x.HasAlias("checkcurrency"));
-                Commands.ChatCommands.RemoveAll(x => x.HasAlias("givecurrency"));
-            }
+                Commands.ChatCommands.RemoveAll(c => c.HasAlias("profile"));
+                Commands.ChatCommands.RemoveAll(c => c.HasAlias("friend"));
+                Commands.ChatCommands.RemoveAll(c => c.HasAlias("globalchat"));
+                Commands.ChatCommands.RemoveAll(c => c.HasAlias("addcurrency"));
+                Commands.ChatCommands.RemoveAll(c => c.HasAlias("removecurrency"));
+                Commands.ChatCommands.RemoveAll(c => c.HasAlias("checkcurrency"));
+                Commands.ChatCommands.RemoveAll(c => c.HasAlias("givecurrency"));
 
+                playerProfiles.Clear();
+                playerCurrency.Clear();
+
+                Config.Save();
+            }
             base.Dispose(disposing);
         }
+    }
 
-        #region Configuration
+    public class UserProfile
+    {
+        public string PlayerName { get; set; }
 
-        public class Config
+        // Add other profile properties here
+
+        public UserProfile(string playerName)
         {
-            public int InitialCurrency { get; set; } = 100;
-            public string CurrencySymbol { get; set; } = "$";
+            PlayerName = playerName;
+        }
+    }
 
-            public static string ConfigPath => Path.Combine(TShock.SavePath, "SocialFeatures.json");
+    public class Config
+    {
+        public int InitialCurrency { get; set; }
+        public string CurrencySymbol { get; set; }
 
-            public static Config Read()
+        public static string SavePath => Path.Combine(TShock.SavePath, "SocialFeaturesConfig.json");
+
+        public static Config Read()
+        {
+            if (File.Exists(SavePath))
             {
-                if (!File.Exists(ConfigPath))
-                    return new Config();
-
-                return JsonConvert.DeserializeObject<Config>(File.ReadAllText(ConfigPath));
+                return JsonConvert.DeserializeObject<Config>(File.ReadAllText(SavePath));
             }
+            return new Config();
+        }
 
-            public static void Save(Config config)
+        public static void Save()
+        {
+            File.WriteAllText(SavePath, JsonConvert.SerializeObject(Config.Instance, Formatting.Indented));
+        }
+
+        public static void Load()
+        {
+            if (!File.Exists(SavePath))
             {
-                File.WriteAllText(ConfigPath, JsonConvert.SerializeObject(config, Formatting.Indented));
+                Config.Instance = new Config();
+                Config.Save();
             }
-
-            public static void Load()
+            else
             {
-                var config = Read();
-                Instance.config = config;
-                Save(config); // Save the config file with default values if it doesn't exist
+                Config.Instance = Config.Read();
             }
         }
 
-        #endregion
+        public static Config Instance { get; set; }
 
-        #region UserProfile
-
-        public class UserProfile
+        public Config()
         {
-            public string PlayerName { get; set; }
-
-            public UserProfile(string playerName)
-            {
-                PlayerName = playerName;
-            }
+            InitialCurrency = 0;
+            CurrencySymbol = "Currency";
         }
-
-        #endregion
     }
 }
