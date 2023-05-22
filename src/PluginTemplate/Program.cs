@@ -55,21 +55,7 @@ namespace SocialFeatures
                 playerCurrency.Add(playerName, config.InitialCurrency);
             }
         }
-
-        private void NPCLoot(NpcLootEventArgs args)
-        {
-            int currencyAmount = 10; // Adjust the amount of currency given for killing an NPC here
-            if (args.Npc != null && args.Npc.active && args.Npc.value > 0 && args.Npc.value >= currencyAmount)
-            {
-                string playerName = Main.player[args.Npc.target].name;
-                if (playerProfiles.ContainsKey(playerName))
-                {
-                    playerCurrency[playerName] += currencyAmount;
-                    TShock.Players[args.Npc.target].SendSuccessMessage($"You received {currencyAmount} {config.CurrencySymbol} for killing the NPC.");
-                }
-            }
-        }
-
+        
         private void ProfileCommand(CommandArgs args)
         {
             string playerName = args.Player.Name;
