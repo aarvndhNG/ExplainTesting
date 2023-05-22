@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using SocialFeatures;
 using Newtonsoft.Json;
 using Terraria;
 using TerrariaApi.Server;
