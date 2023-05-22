@@ -7,8 +7,9 @@ using Terraria;
 using TerrariaApi.Server;
 using TShockAPI;
 using TShockAPI.Hooks;
+using NpcLootEventArgs;
 
-namespace YourNamespace
+namespace SocialFeatures
 {
     [ApiVersion(2, 1)]
     public class SocialFeatures : TerrariaPlugin
