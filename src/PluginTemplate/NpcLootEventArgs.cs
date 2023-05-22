@@ -1,6 +1,7 @@
 using System;
 using TerrariaApi.Server;
 using TShockAPI;
+using SocialFeatures;
 
 namespace SocialFeatures
 {
