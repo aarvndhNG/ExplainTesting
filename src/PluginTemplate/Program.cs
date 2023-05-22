@@ -7,7 +7,6 @@ using Terraria;
 using TerrariaApi.Server;
 using TShockAPI;
 using TShockAPI.Hooks;
-using NpcLootEventArgs;
 
 namespace SocialFeatures
 {
