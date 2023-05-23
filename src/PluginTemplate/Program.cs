@@ -201,11 +201,12 @@ namespace CustomChatChannels
             }
         }
 
-        public override void DeInitialize()
+        public void DeInitialize()
         {
             playerChannels.Clear();
             channelColors.Clear();
             SaveConfig();
         }
+
     }
 }
