@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.IO;
+using Newtonsoft.Json;
 using Terraria;
 using TerrariaApi.Server;
 using TShockAPI;
@@ -18,8 +19,8 @@ namespace Paintball
         private List<string> playersInGame;
         private Dictionary<string, DateTime> lastShootTimes;
 
-        private int paintballItemId; // Configurable paintball item ID
-        private int paintballProjectileType; // Configurable paintball projectile type
+        private int paintballItemId;
+        private int paintballProjectileType;
 
         public PaintballPlugin(Main game) : base(game)
         {
@@ -30,18 +31,64 @@ namespace Paintball
             playersInGame = new List<string>();
             lastShootTimes = new Dictionary<string, DateTime>();
 
+            LoadConfig();
+
             ServerApi.Hooks.NetGetData.Register(this, OnGetData);
             TShockAPI.Commands.ChatCommands.Add(new Command("paintball", PaintballCommand, "paintball"));
-
-            // Load configuration values
-            paintballItemId = /* Set the item ID for the paintball item */;
-            paintballProjectileType = /* Set the projectile type for the paintball projectile */;
         }
 
         public override void DeInitialize()
         {
             playersInGame.Clear();
             lastShootTimes.Clear();
+
+            SaveConfig();
+        }
+
+        private void LoadConfig()
+        {
+            var configPath = Path.Combine(TShock.SavePath, "paintball_config.json");
+
+            if (File.Exists(configPath))
+            {
+                var configText = File.ReadAllText(configPath);
+                var config = JsonConvert.DeserializeObject<Config>(configText);
+
+                if (config != null)
+                {
+                    paintballItemId = config.PaintballItemId;
+                    paintballProjectileType = config.PaintballProjectileType;
+                }
+                else
+                {
+                    TShock.Log.Error("Failed to parse paintball configuration file. Using default values.");
+                    SetDefaultConfig();
+                }
+            }
+            else
+            {
+                TShock.Log.Info("Paintball configuration file not found. Using default values.");
+                SetDefaultConfig();
+            }
+        }
+
+        private void SaveConfig()
+        {
+            var configPath = Path.Combine(TShock.SavePath, "paintball_config.json");
+            var config = new Config
+            {
+                PaintballItemId = paintballItemId,
+                PaintballProjectileType = paintballProjectileType
+            };
+
+            var configText = JsonConvert.SerializeObject(config, Formatting.Indented);
+            File.WriteAllText(configPath, configText);
+        }
+
+        private void SetDefaultConfig()
+        {
+            paintballItemId = 1234; // Default paintball item ID
+            paintballProjectileType = 5678; // Default paintball projectile type
         }
 
         private void OnGetData(GetDataEventArgs args)
@@ -119,5 +166,11 @@ namespace Paintball
                     break;
             }
         }
+    }
+
+    public class Config
+    {
+        public int PaintballItemId { get; set; }
+        public int PaintballProjectileType { get; set; }
     }
 }
