@@ -35,7 +35,7 @@ namespace PlayerShopsPlugin
             ServerApi.Hooks.NetGetData.Register(this, OnGetData);
         }
 
-        public override void DeInitialize()
+        public void DeInitialize()
         {
             playerShops.Clear();
         }
