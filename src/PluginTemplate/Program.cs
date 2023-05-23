@@ -34,9 +34,13 @@ namespace EconomySystem
             LoadData();
         }
 
-        public override void DeInitialize()
+        protected override void Dispose(bool disposing)
         {
-            SaveData();
+            if (disposing)
+            {
+                SaveData();
+            }
+            base.Dispose(disposing);
         }
 
         private void OnGetData(GetDataEventArgs args)
@@ -194,3 +198,4 @@ namespace EconomySystem
         public int Price { get; set; }
     }
 }
+
