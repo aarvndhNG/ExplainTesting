@@ -6,177 +6,215 @@ using Terraria;
 using TerrariaApi.Server;
 using TShockAPI;
 
-namespace EconomySystem
+namespace CustomChatChannels
 {
     [ApiVersion(2, 1)]
-    public class EconomySystem : TerrariaPlugin
+    public class CustomChatChannelsPlugin : TerrariaPlugin
     {
-        public override string Name => "EconomySystem";
+        private Dictionary<string, string> playerChannels;
+        private Dictionary<string, Color> channelColors;
+        private Dictionary<string, ChatChannelConfig> channelConfigs;
+        private string configFile = Path.Combine(TShock.SavePath, "CustomChatChannelsConfig.json");
+
+        public override string Name => "CustomChatChannels";
         public override Version Version => new Version(1, 0, 0);
         public override string Author => "YourName";
-        public override string Description => "In-game economy system with currency, trading, and shops.";
+        public override string Description => "Allows players to create and manage custom chat channels.";
 
-        private Dictionary<string, int> playerBalances;
-        private Dictionary<string, List<Item>> playerInventory;
-
-        public EconomySystem(Main game) : base(game)
+        public CustomChatChannelsPlugin(Main game) : base(game)
         {
         }
 
         public override void Initialize()
         {
-            playerBalances = new Dictionary<string, int>();
-            playerInventory = new Dictionary<string, List<Item>>();
+            playerChannels = new Dictionary<string, string>();
+            channelColors = new Dictionary<string, Color>();
+            channelConfigs = new Dictionary<string, ChatChannelConfig>();
 
-            ServerApi.Hooks.NetGetData.Register(this, OnGetData);
-            TShockAPI.Commands.ChatCommands.Add(new Command("economy", EconomyCommand, "economy"));
+            TShockAPI.Commands.ChatCommands.Add(new Command("customchat.channel.create", CreateChannel, "createchannel"));
+            TShockAPI.Commands.ChatCommands.Add(new Command("customchat.channel.join", JoinChannel, "joinchannel"));
+            TShockAPI.Commands.ChatCommands.Add(new Command("customchat.channel.leave", LeaveChannel, "leavechannel"));
+            TShockAPI.Commands.ChatCommands.Add(new Command("customchat.channel.chat", ChatChannel, "chat", "c"));
+            TShockAPI.Commands.ChatCommands.Add(new Command("customchat.channel.list", ListChannels, "listchannels"));
+            TShockAPI.Commands.ChatCommands.Add(new Command("customchat.channel.color", SetChannelColor, "setchannelcolor"));
+            ServerApi.Hooks.ServerChat.Register(this, OnChat);
 
-            LoadData();
+            LoadConfig();
+        }
+
+        private void OnChat(ServerChatEventArgs args)
+        {
+            var player = TShock.Players[args.Who];
+            if (player == null || !playerChannels.ContainsKey(player.Name))
+                return;
+
+            var channel = playerChannels[player.Name];
+            if (channel == null)
+                return;
+
+            var channelColor = channelColors.ContainsKey(channel) ? channelColors[channel] : Color.White;
+            var message = $"[{channel}] {player.Name}: {args.Text}";
+
+            TSPlayer.All.SendMessage(message, channelColor);
+
+            args.Handled = true;
+        }
+
+        private void CreateChannel(CommandArgs args)
+        {
+            if (args.Parameters.Count < 1)
+            {
+                args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /createchannel <channelname>");
+                return;
+            }
+
+            var channelName = args.Parameters[0];
+
+            if (playerChannels.ContainsKey(channelName))
+            {
+                args.Player.SendErrorMessage($"Channel '{channelName}' already exists.");
+                return;
+            }
+
+            playerChannels[args.Player.Name] = channelName;
+            args.Player.SendSuccessMessage($"Created and joined channel '{channelName}'.");
+        }
+
+        private void JoinChannel(CommandArgs args)
+        {
+            if (args.Parameters.Count < 1)
+            {
+                args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /joinchannel <channelname>");
+                return;
+            }
+
+            var channelName = args.Parameters[0];
+
+            if (!playerChannels.ContainsKey(channelName))
+            {
+                args.Player.SendErrorMessage($"Channel '{channelName}' does not exist.");
+                return;
+            }
+
+            playerChannels[args.Player.Name] = channelName;
+            args.Player.SendSuccessMessage($"Joined channel '{channelName}'.");
+        }
+
+        private void LeaveChannel(CommandArgs args)
+        {
+            if (!playerChannels.ContainsKey(args.Player.Name))
+            {
+                args.Player.SendErrorMessage("You are not in a channel.");
+                return;
+            }
+
+            var channel = playerChannels[args.Player.Name];
+            playerChannels.Remove(args.Player.Name);
+            args.Player.SendSuccessMessage($"Left channel '{channel}'.");
+        }
+
+        private void ChatChannel(CommandArgs args)
+        {
+            if (!playerChannels.ContainsKey(args.Player.Name))
+            {
+                args.Player.SendErrorMessage("You are not in a channel.");
+                return;
+            }
+
+            var channel = playerChannels[args.Player.Name];
+            var channelColor = channelColors.ContainsKey(channel) ? channelColors[channel] : Color.White;
+            var message = string.Join(" ", args.Parameters);
+
+            TSPlayer.All.SendMessage($"[{channel}] {args.Player.Name}: {message}", channelColor);
+        }
+
+        private void ListChannels(CommandArgs args)
+        {
+            var channelList = string.Join(", ", playerChannels.Values);
+            args.Player.SendInfoMessage($"Channels: {channelList}");
+        }
+
+        private void SetChannelColor(CommandArgs args)
+        {
+            if (args.Parameters.Count < 4)
+            {
+                args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /setchannelcolor <channelname> <R> <G> <B>");
+                return;
+            }
+
+            var channelName = args.Parameters[0];
+            var rStr = args.Parameters[1];
+            var gStr = args.Parameters[2];
+            var bStr = args.Parameters[3];
+
+            if (!playerChannels.ContainsKey(channelName))
+            {
+                args.Player.SendErrorMessage($"Channel '{channelName}' does not exist.");
+                return;
+            }
+
+            if (!int.TryParse(rStr, out var r) || !int.TryParse(gStr, out var g) || !int.TryParse(bStr, out var b))
+            {
+                args.Player.SendErrorMessage("Invalid color values specified.");
+                return;
+            }
+
+            var color = new Color(r, g, b);
+            channelColors[channelName] = color;
+
+            args.Player.SendSuccessMessage($"Set color for channel '{channelName}' to ({r}, {g}, {b}).");
+        }
+
+        private void LoadConfig()
+        {
+            if (File.Exists(configFile))
+            {
+                try
+                {
+                    var json = File.ReadAllText(configFile);
+                    channelConfigs = JsonConvert.DeserializeObject<Dictionary<string, ChatChannelConfig>>(json);
+                }
+                catch (Exception ex)
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("Error loading configuration:");
+                    Console.WriteLine(ex);
+                    Console.ResetColor();
+                }
+            }
+
+            if (channelConfigs == null)
+                channelConfigs = new Dictionary<string, ChatChannelConfig>();
+        }
+
+        private void SaveConfig()
+        {
+            try
+            {
+                var json = JsonConvert.SerializeObject(channelConfigs, Formatting.Indented);
+                File.WriteAllText(configFile, json);
+            }
+            catch (Exception ex)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Error saving configuration:");
+                Console.WriteLine(ex);
+                Console.ResetColor();
+            }
         }
 
         public override void DeInitialize()
         {
-            SaveData();
-        }
-
-        private void OnGetData(GetDataEventArgs args)
-        {
-            if (args.MsgID == PacketTypes.PlayerDeathV2)
-            {
-                using (var reader = new BinaryReader(new MemoryStream(args.Msg.readBuffer, args.Index, args.Length)))
-                {
-                    var playerID = reader.ReadInt16();
-                    var hitDirection = reader.ReadByte();
-                    var deathDamage = reader.ReadInt16();
-                    var deathSource = reader.ReadByte();
-                    var playerIdAssist = reader.ReadByte();
-
-                    if (playerIdAssist != playerID)
-                    {
-                        var player = TShock.Players[playerID];
-                        if (player != null)
-                        {
-                            var playerName = player.Name;
-                            if (playerBalances.ContainsKey(playerName))
-                            {
-                                var penaltyAmount = CalculatePenaltyAmount(deathDamage);
-                                playerBalances[playerName] -= penaltyAmount;
-                                player.SendInfoMessage($"You lost {penaltyAmount} currency due to death.");
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        private void EconomyCommand(CommandArgs args)
-        {
-            if (args.Parameters.Count < 1)
-            {
-                args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /economy <balance|pay|shop>");
-                return;
-            }
-
-            var subCommand = args.Parameters[0];
-
-            switch (subCommand.ToLower())
-            {
-                case "balance":
-                    CheckBalance(args.Player);
-                    break;
-
-                case "pay":
-                    if (args.Parameters.Count < 3)
-                    {
-                        args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /economy pay <player> <amount>");
-                        return;
-                    }
-
-                    var recipient = args.Parameters[1];
-                    var amountStr = args.Parameters[2];
-
-                    if (!playerBalances.ContainsKey(args.Player.Name))
-                    {
-                        args.Player.SendErrorMessage("You don't have a valid balance.");
-                        return;
-                    }
-
-                    if (!playerBalances.ContainsKey(recipient))
-                    {
-                        args.Player.SendErrorMessage($"'{recipient}' does not have a valid balance.");
-                        return;
-                    }
-
-                    if (!int.TryParse(amountStr, out var amount) || amount <= 0)
-                    {
-                        args.Player.SendErrorMessage("Invalid amount specified.");
-                        return;
-                    }
-
-                    if (playerBalances[args.Player.Name] < amount)
-                    {
-                        args.Player.SendErrorMessage("You don't have enough currency.");
-                        return;
-                    }
-
-                    playerBalances[args.Player.Name] -= amount;
-                    playerBalances[recipient] += amount;
-
-                    args.Player.SendSuccessMessage($"You paid {recipient} {amount} currency.");
-                    TShock.Players.SendMessage($"{args.Player.Name} paid you {amount} currency.", recipient, Color.Yellow);
-                    break;
-
-                case "shop":
-                    // Implement shop functionality here
-                    break;
-
-                default:
-                    args.Player.SendErrorMessage("Invalid subcommand! Available subcommands: balance, pay, shop");
-                    break;
-            }
-        }
-
-        private void CheckBalance(TSPlayer player)
-        {
-            if (playerBalances.ContainsKey(player.Name))
-                player.SendInfoMessage($"Your balance: {playerBalances[player.Name]} currency");
-            else
-                player.SendErrorMessage("You don't have a valid balance.");
-        }
-
-        private int CalculatePenaltyAmount(int deathDamage)
-        {
-            // Implement your own calculation logic here for determining the penalty amount
-            return deathDamage / 10;
-        }
-
-        private void SaveData()
-        {
-            var data = new Dictionary<string, object>
-            {
-                { "Balances", playerBalances },
-                { "Inventory", playerInventory }
-            };
-
-            File.WriteAllText("economy.json", JsonConvert.SerializeObject(data));
-        }
-
-        private void LoadData()
-        {
-            if (File.Exists("economy.json"))
-            {
-                var data = JsonConvert.DeserializeObject<Dictionary<string, object>>(File.ReadAllText("economy.json"));
-
-                if (data != null)
-                {
-                    if (data.TryGetValue("Balances", out var balances))
-                        playerBalances = balances as Dictionary<string, int>;
-
-                    if (data.TryGetValue("Inventory", out var inventory))
-                        playerInventory = inventory as Dictionary<string, List<Item>>;
-                }
-            }
+            playerChannels.Clear();
+            channelColors.Clear();
+            SaveConfig();
         }
     }
-}
 
+    public class ChatChannelConfig
+    {
+        public string Name { get; set; }
+        public string Permission { get; set; }
+        public Color Color { get; set; }
+    }
+}
