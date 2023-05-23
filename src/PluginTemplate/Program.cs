@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
+using System.IO;
 using Terraria;
 using TerrariaApi.Server;
 using TShockAPI;
@@ -33,12 +34,14 @@ namespace PlayerShopsPlugin
             Commands.ChatCommands.Add(new Command("playershops.leaderboard", ShowLeaderboard, "shopleaderboard"));
             Commands.ChatCommands.Add(new Command("playershops.shopinfo", ShopInfo, "shopinfo"));
             Commands.ChatCommands.Add(new Command("playershops.check", CheckBalance, "check"));
+
+            LoadConfig();
         }
 
-        public void DeInitialize()
+        public override void DeInitialize()
         {
             playerShops.Clear();
-            ReadConfig();
+            SaveConfig();
         }
 
         private void CreateShop(CommandArgs args)
@@ -58,7 +61,7 @@ namespace PlayerShopsPlugin
                 return;
             }
 
-            Shop shop = new Shop(shopName, playerId);
+            Shop shop = new Shop(playerId, shopName, playerId);
             playerShops.Add(playerId, shop);
             args.Player.SendSuccessMessage($"Shop '{shopName}' created successfully with ID: {shop.Id}");
             SaveConfig();
@@ -228,91 +231,130 @@ namespace PlayerShopsPlugin
                 return;
             }
 
-            if (args.Parameters.Count < 1)
+            Shop shop = playerShops[playerId];
+            int amount = shop.CalculateTotalIncome();
+
+            if (amount <= 0)
             {
-                args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /shopreceivemoney [amount]");
+                args.Player.SendInfoMessage("No money to receive.");
                 return;
             }
 
-            int amount;
-            if (!int.TryParse(args.Parameters[0], out amount) || amount < 0)
+            args.Player.BankAccount.Deposit(amount);
+            args.Player.SendSuccessMessage($"You received {amount} coins from your shop.");
+            shop.ClearIncome();
+            SaveConfig();
+        }
+
+        private void ShowLeaderboard(CommandArgs args)
+        {
+            if (playerShops.Count == 0)
             {
-                args.Player.SendErrorMessage("Invalid amount specified.");
+                args.Player.SendInfoMessage("No shops are available.");
                 return;
             }
 
-            if (args.Player.BankAccount.Balance < amount)
+            List<Shop> sortedShops = new List<Shop>(playerShops.Values);
+            sortedShops.Sort((a, b) => b.CalculateTotalIncome().CompareTo(a.CalculateTotalIncome()));
+
+            args.Player.SendInfoMessage("Shop Leaderboard:");
+            int rank = 1;
+            foreach (var shop in sortedShops)
             {
-                args.Player.SendErrorMessage("Insufficient funds.");
+                args.Player.SendInfoMessage($"{rank}. Shop ID: {shop.Id} | Owner: {TShock.Players[shop.OwnerId].Name} | Total Income: {shop.CalculateTotalIncome()} coins");
+                rank++;
+            }
+        }
+
+        private void ShopInfo(CommandArgs args)
+        {
+            int playerId = args.Player.Index;
+
+            if (!playerShops.ContainsKey(playerId))
+            {
+                args.Player.SendErrorMessage("You don't have a shop.");
                 return;
             }
 
             Shop shop = playerShops[playerId];
-            TShock.Players[shop.OwnerId].BankAccount.Deposit(amount);
-            args.Player.BankAccount.Withdraw(amount);
-            args.Player.SendSuccessMessage($"You received {amount} coins.");
+
+            args.Player.SendInfoMessage($"Shop ID: {shop.Id} | Name: {shop.Name} | Owner: {TShock.Players[shop.OwnerId].Name}");
+            args.Player.SendInfoMessage("Items in the shop:");
+            foreach (var item in shop.Items)
+            {
+                args.Player.SendInfoMessage($"Item: {item.Name} | Price: {item.Price}");
+            }
         }
 
-        private void SaveConfig()
+        private void CheckBalance(CommandArgs args)
         {
-            var config = new Config
-            {
-                PlayerShops = playerShops,
-                ShopItems = shopItems
-            };
-            string json = JsonConvert.SerializeObject(config, Formatting.Indented);
-            File.WriteAllText(ConfigPath, json);
+            int playerId = args.Player.Index;
+
+            args.Player.SendInfoMessage($"Your current balance is: {args.Player.BankAccount.Balance} coins.");
         }
 
         private void LoadConfig()
         {
-            if (!File.Exists(ConfigPath))
+            string filePath = Path.Combine(TShock.SavePath, "playershops.json");
+            if (!File.Exists(filePath))
                 return;
 
-            string json = File.ReadAllText(ConfigPath);
-            var config = JsonConvert.DeserializeObject<Config>(json);
-
-            if (config != null)
-            {
-                playerShops = config.PlayerShops;
-                shopItems = config.ShopItems;
-            }
+            string json = File.ReadAllText(filePath);
+            playerShops = JsonConvert.DeserializeObject<Dictionary<int, Shop>>(json);
         }
 
-        private class Shop
+        private void SaveConfig()
         {
-            public int Id { get; set; }
-            public string Name { get; set; }
-            public int OwnerId { get; set; }
-            public List<ShopItem> Items { get; set; }
+            string filePath = Path.Combine(TShock.SavePath, "playershops.json");
+            string json = JsonConvert.SerializeObject(playerShops, Formatting.Indented);
+            File.WriteAllText(filePath, json);
+        }
+    }
 
-            public Shop(int id, string name, int ownerId)
-            {
-                Id = id;
-                Name = name;
-                OwnerId = ownerId;
-                Items = new List<ShopItem>();
-            }
+    public class Shop
+    {
+        public int Id { get; }
+        public string Name { get; }
+        public int OwnerId { get; }
+        public List<ShopItem> Items { get; }
+
+        public Shop(int id, string name, int ownerId)
+        {
+            Id = id;
+            Name = name;
+            OwnerId = ownerId;
+            Items = new List<ShopItem>();
         }
 
-        private class ShopItem
+        public int CalculateTotalIncome()
         {
-            public int NetId { get; set; }
-            public string Name { get; set; }
-            public int Price { get; set; }
-
-            public ShopItem(int netId, string name, int price)
+            int total = 0;
+            foreach (var item in Items)
             {
-                NetId = netId;
-                Name = name;
-                Price = price;
+                total += item.Price * item.Stack;
             }
+            return total;
         }
 
-        private class Config
+        public void ClearIncome()
         {
-            public Dictionary<int, Shop> PlayerShops { get; set; }
-            public List<ShopItem> ShopItems { get; set; }
+            Items.Clear();
+        }
+    }
+
+    public class ShopItem
+    {
+        public int NetId { get; }
+        public string Name { get; }
+        public int Price { get; }
+        public int Stack { get; }
+
+        public ShopItem(int netId, string name, int price, int stack = 1)
+        {
+            NetId = netId;
+            Name = name;
+            Price = price;
+            Stack = stack;
         }
     }
 }
