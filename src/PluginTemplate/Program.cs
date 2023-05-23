@@ -21,6 +21,7 @@ namespace Paintball
 
         private int paintballItemId;
         private int paintballProjectileType;
+        private float paintballSpeed;
 
         public PaintballPlugin(Main game) : base(game)
         {
@@ -34,7 +35,7 @@ namespace Paintball
             LoadConfig();
 
             ServerApi.Hooks.NetGetData.Register(this, OnGetData);
-            TShockAPI.Commands.ChatCommands.Add(new Command("paintball", PaintballCommand, "paintball"));
+            Commands.ChatCommands.Add(new Command("paintball", PaintballCommand, "paintball"));
         }
 
         public override void DeInitialize()
@@ -58,6 +59,7 @@ namespace Paintball
                 {
                     paintballItemId = config.PaintballItemId;
                     paintballProjectileType = config.PaintballProjectileType;
+                    paintballSpeed = config.PaintballSpeed;
                 }
                 else
                 {
@@ -78,7 +80,8 @@ namespace Paintball
             var config = new Config
             {
                 PaintballItemId = paintballItemId,
-                PaintballProjectileType = paintballProjectileType
+                PaintballProjectileType = paintballProjectileType,
+                PaintballSpeed = paintballSpeed
             };
 
             var configText = JsonConvert.SerializeObject(config, Formatting.Indented);
@@ -89,6 +92,7 @@ namespace Paintball
         {
             paintballItemId = 1234; // Default paintball item ID
             paintballProjectileType = 5678; // Default paintball projectile type
+            paintballSpeed = 10f; // Default paintball speed
         }
 
         private void OnGetData(GetDataEventArgs args)
@@ -172,5 +176,6 @@ namespace Paintball
     {
         public int PaintballItemId { get; set; }
         public int PaintballProjectileType { get; set; }
+        public float PaintballSpeed { get; set; }
     }
 }
