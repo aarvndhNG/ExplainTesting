@@ -38,13 +38,14 @@ namespace Paintball
             Commands.ChatCommands.Add(new Command("paintball", PaintballCommand, "paintball"));
         }
 
-        public override void DeInitialize()
+        public void DeInitialize()
         {
             playersInGame.Clear();
             lastShootTimes.Clear();
 
             SaveConfig();
         }
+
 
         private void LoadConfig()
         {
