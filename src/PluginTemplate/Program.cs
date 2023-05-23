@@ -13,7 +13,6 @@ namespace CustomChatChannels
     {
         private Dictionary<string, string> playerChannels;
         private Dictionary<string, Color> channelColors;
-        private Dictionary<string, ChatChannelConfig> channelConfigs;
         private string configFile = Path.Combine(TShock.SavePath, "CustomChatChannelsConfig.json");
 
         public override string Name => "CustomChatChannels";
@@ -29,7 +28,6 @@ namespace CustomChatChannels
         {
             playerChannels = new Dictionary<string, string>();
             channelColors = new Dictionary<string, Color>();
-            channelConfigs = new Dictionary<string, ChatChannelConfig>();
 
             TShockAPI.Commands.ChatCommands.Add(new Command("customchat.channel.create", CreateChannel, "createchannel"));
             TShockAPI.Commands.ChatCommands.Add(new Command("customchat.channel.join", JoinChannel, "joinchannel"));
@@ -172,7 +170,7 @@ namespace CustomChatChannels
                 try
                 {
                     var json = File.ReadAllText(configFile);
-                    channelConfigs = JsonConvert.DeserializeObject<Dictionary<string, ChatChannelConfig>>(json);
+                    channelColors = JsonConvert.DeserializeObject<Dictionary<string, Color>>(json);
                 }
                 catch (Exception ex)
                 {
@@ -183,15 +181,15 @@ namespace CustomChatChannels
                 }
             }
 
-            if (channelConfigs == null)
-                channelConfigs = new Dictionary<string, ChatChannelConfig>();
+            if (channelColors == null)
+                channelColors = new Dictionary<string, Color>();
         }
 
         private void SaveConfig()
         {
             try
             {
-                var json = JsonConvert.SerializeObject(channelConfigs, Formatting.Indented);
+                var json = JsonConvert.SerializeObject(channelColors, Formatting.Indented);
                 File.WriteAllText(configFile, json);
             }
             catch (Exception ex)
@@ -209,12 +207,5 @@ namespace CustomChatChannels
             channelColors.Clear();
             SaveConfig();
         }
-    }
-
-    public class ChatChannelConfig
-    {
-        public string Name { get; set; }
-        public string Permission { get; set; }
-        public Color Color { get; set; }
     }
 }
