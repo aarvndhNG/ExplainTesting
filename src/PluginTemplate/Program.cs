@@ -34,13 +34,9 @@ namespace EconomySystem
             LoadData();
         }
 
-        protected override void Dispose(bool disposing)
+        public override void DeInitialize()
         {
-            if (disposing)
-            {
-                SaveData();
-            }
-            base.Dispose(disposing);
+            SaveData();
         }
 
         private void OnGetData(GetDataEventArgs args)
@@ -181,21 +177,6 @@ namespace EconomySystem
                 }
             }
         }
-    }
-
-    public class Config
-    {
-        public string CurrencyName { get; set; }
-        public int StartingBalance { get; set; }
-        public int DeathPenaltyPercentage { get; set; }
-        public List<ShopItem> ShopItems { get; set; }
-    }
-
-    public class ShopItem
-    {
-        public string Name { get; set; }
-        public int ID { get; set; }
-        public int Price { get; set; }
     }
 }
 
