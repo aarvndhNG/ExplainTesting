@@ -120,7 +120,8 @@ namespace Paintball
 
                         var paintballSpeed = 10.0;
 
-                        var paintball = Terraria.Projectile.NewProjectile(player.position.X, player.position.Y, velX * paintballSpeed, velY * paintballSpeed, paintballProjectileType, paintballItem.damage, paintballItem.knockBack, playerIndex);
+                        int paintballProjectileType = ProjectileID.Paintball;
+
                         NetMessage.SendData(27, -1, -1, null, paintball);
                         lastShootTimes[player.Name] = DateTime.Now;
                     }
