@@ -35,12 +35,11 @@ namespace PlayerShopsPlugin
             Commands.ChatCommands.Add(new Command("playershops.check", CheckBalance, "check"));
         }
 
-        public override void DeInitialize()
+        public void DeInitialize()
         {
-           playerShops.Clear();
-           base.DeInitialize();
-         }
-
+            playerShops.Clear();
+            ReadConfig();
+        }
 
         private void CreateShop(CommandArgs args)
         {
