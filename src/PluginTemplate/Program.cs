@@ -201,7 +201,7 @@ namespace PlayerShopsPlugin
                 return;
             }
 
-            Item item = shop.Items.Find(i => i.Name.Equals(itemName, StringComparison.OrdinalIgnoreCase));
+            ShopItem item = shop.Items.Find(i => i.Name.Equals(itemName, StringComparison.OrdinalIgnoreCase));
 
             if (item == null)
             {
