@@ -37,9 +37,10 @@ namespace PlayerShopsPlugin
 
         public override void DeInitialize()
         {
-            playerShops.Clear();
-            ReadConfig();
-        }
+           playerShops.Clear();
+           base.DeInitialize();
+         }
+
 
         private void CreateShop(CommandArgs args)
         {
