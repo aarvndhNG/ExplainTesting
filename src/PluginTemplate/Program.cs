@@ -67,7 +67,7 @@ namespace BossRewards
 
             defaultConfig[NPCID.EaterofWorldsHead] = new BossReward
             {
-                ItemID = ItemID.IronSkinPotion,
+                ItemID = ItemID.IronskinPotion,
                 Amount = 5,
                 Message = "You received 5 Ironskin Potions for defeating the Eater of Worlds!"
             };
@@ -92,11 +92,12 @@ namespace BossRewards
 
         private void OnNpcKilled(NpcKilledEventArgs args)
         {
-            Player player = TShock.Players[args.PlayerId];
+            var player = TShock.Players[args.npc.lastInteraction];
+
             if (player == null || !player.Active)
                 return;
 
-            int npcType = args.npc.netID;
+            int npcType = args.npc.type;
 
             if (bossRewards.ContainsKey(npcType))
             {
