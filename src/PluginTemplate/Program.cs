@@ -38,7 +38,7 @@ namespace PlayerShopsPlugin
             LoadConfig();
         }
 
-        public override void DeInitialize()
+        public void DeInitialize()
         {
             playerShops.Clear();
             SaveConfig();
