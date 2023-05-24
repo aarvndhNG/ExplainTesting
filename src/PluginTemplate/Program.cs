@@ -1,414 +1,116 @@
 using System;
 using System.Collections.Generic;
-using Newtonsoft.Json;
 using System.IO;
+using Newtonsoft.Json;
 using Terraria;
 using TerrariaApi.Server;
 using TShockAPI;
 
-namespace PlayerShopsPlugin
+namespace BossRewards
 {
     [ApiVersion(2, 1)]
-    public class PlayerShopsPlugin : TerrariaPlugin
+    public class BossRewards : TerrariaPlugin
     {
-        public override string Name => "PlayerShops";
+        public override string Name => "BossRewards";
+        public override string Author => "YourName";
+        public override string Description => "Provides configurable rewards for defeating bosses.";
         public override Version Version => new Version(1, 0, 0);
-        public override string Author => "Your Name";
-        public override string Description => "Enable players to set up their own shops where they can sell items to other players in a centralized marketplace.";
 
-        private Dictionary<int, Shop> playerShops = new Dictionary<int, Shop>();
+        private Dictionary<int, BossReward> bossRewards;
 
-        public PlayerShopsPlugin(Main game) : base(game)
+        public BossRewards(Main game) : base(game)
         {
+            bossRewards = new Dictionary<int, BossReward>();
         }
 
         public override void Initialize()
         {
-            Commands.ChatCommands.Add(new Command("playershops.create", CreateShop, "shopcreate"));
-            Commands.ChatCommands.Add(new Command("playershops.remove", RemoveShop, "shopremove"));
-            Commands.ChatCommands.Add(new Command("playershops.additem", AddItem, "shopadditem"));
-            Commands.ChatCommands.Add(new Command("playershops.removeitem", RemoveItem, "shopremoveitem"));
-            Commands.ChatCommands.Add(new Command("playershops.browse", BrowseShops, "shopbrowse"));
-            Commands.ChatCommands.Add(new Command("playershops.buy", BuyItem, "shopbuy"));
-            Commands.ChatCommands.Add(new Command("playershops.receive", ReceiveMoney, "shopreceive"));
-            Commands.ChatCommands.Add(new Command("playershops.leaderboard", ShowLeaderboard, "shopleaderboard"));
-            Commands.ChatCommands.Add(new Command("playershops.shopinfo", ShopInfo, "shopinfo"));
-            Commands.ChatCommands.Add(new Command("playershops.check", CheckBalance, "check"));
-
-            LoadConfig();
+            ServerApi.Hooks.NpcKilled.Register(this, OnNpcKilled);
+            SetupConfig();
         }
 
-        public void DeInitialize()
+        protected override void Dispose(bool disposing)
         {
-            playerShops.Clear();
-            SaveConfig();
+            if (disposing)
+            {
+                ServerApi.Hooks.NpcKilled.Deregister(this, OnNpcKilled);
+            }
+            base.Dispose(disposing);
         }
 
-        private void CreateShop(CommandArgs args)
+        private void SetupConfig()
         {
-            int playerId = args.Player.Index;
-            string shopName = args.Parameters.Count > 0 ? args.Parameters[0] : string.Empty;
+            string configPath = Path.Combine(TShock.SavePath, "BossRewardsConfig.json");
 
-            if (playerShops.ContainsKey(playerId))
+            if (File.Exists(configPath))
             {
-                args.Player.SendErrorMessage("You already have a shop.");
-                return;
-            }
-
-            if (string.IsNullOrEmpty(shopName))
-            {
-                args.Player.SendErrorMessage("Please provide a shop name.");
-                return;
-            }
-
-            Shop shop = new Shop(playerId, shopName, playerId);
-            playerShops.Add(playerId, shop);
-            args.Player.SendSuccessMessage($"Shop '{shopName}' created successfully with ID: {shop.Id}");
-            SaveConfig();
-        }
-
-        private void RemoveShop(CommandArgs args)
-        {
-            int playerId = args.Player.Index;
-
-            if (!playerShops.ContainsKey(playerId))
-            {
-                args.Player.SendErrorMessage("You don't have a shop.");
-                return;
-            }
-
-            Shop shop = playerShops[playerId];
-            playerShops.Remove(playerId);
-            args.Player.SendSuccessMessage($"Shop '{shop.Name}' (ID: {shop.Id}) removed successfully.");
-            SaveConfig();
-        }
-
-        private void AddItem(CommandArgs args)
-        {
-            int playerId = args.Player.Index;
-
-            if (!playerShops.ContainsKey(playerId))
-            {
-                args.Player.SendErrorMessage("You don't have a shop.");
-                return;
-            }
-
-            if (args.Parameters.Count < 2)
-            {
-                args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /shopadditem [item name] [price]");
-                return;
-            }
-
-            string itemName = args.Parameters[0];
-            int price;
-
-            if (!int.TryParse(args.Parameters[1], out price))
-            {
-                args.Player.SendErrorMessage("Invalid price! Price must be an integer.");
-                return;
-            }
-
-            if (price <= 0)
-            {
-                args.Player.SendErrorMessage("Invalid price! Price must be greater than zero.");
-                return;
-            }
-
-            Shop shop = playerShops[playerId];
-            var item = TShock.Utils.GetItemByIdOrName(itemName);
-            if (item.ItemType == 0)
-            {
-                args.Player.SendErrorMessage("Invalid item name!");
-                return;
-            }
-
-            shop.AddItem(new ShopItem(item.ItemID, price));
-            args.Player.SendSuccessMessage($"Item '{item.name}' added to your shop.");
-            SaveConfig();
-        }
-
-        private void RemoveItem(CommandArgs args)
-        {
-            int playerId = args.Player.Index;
-
-            if (!playerShops.ContainsKey(playerId))
-            {
-                args.Player.SendErrorMessage("You don't have a shop.");
-                return;
-            }
-
-            if (args.Parameters.Count < 1)
-            {
-                args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /shopremoveitem [item name]");
-                return;
-            }
-
-            string itemName = args.Parameters[0];
-            Shop shop = playerShops[playerId];
-            var item = TShock.Utils.GetItemByIdOrName(itemName);
-            if (item.ItemType == 0)
-            {
-                args.Player.SendErrorMessage("Invalid item name!");
-                return;
-            }
-
-            if (shop.RemoveItem(item.ItemID))
-            {
-                args.Player.SendSuccessMessage($"Item '{item.name}' removed from your shop.");
-                SaveConfig();
+                bossRewards = JsonConvert.DeserializeObject<Dictionary<int, BossReward>>(File.ReadAllText(configPath));
             }
             else
             {
-                args.Player.SendErrorMessage($"Item '{item.name}' not found in your shop.");
+                bossRewards = CreateDefaultConfig();
+                File.WriteAllText(configPath, JsonConvert.SerializeObject(bossRewards, Formatting.Indented));
             }
         }
 
-        private void BrowseShops(CommandArgs args)
+        private Dictionary<int, BossReward> CreateDefaultConfig()
         {
-            List<Shop> shops = new List<Shop>(playerShops.Values);
-            if (shops.Count == 0)
-            {
-                args.Player.SendInfoMessage("There are no player shops available.");
-                return;
-            }
+            Dictionary<int, BossReward> defaultConfig = new Dictionary<int, BossReward>();
 
-            args.Player.SendInfoMessage("---- Player Shops ----");
-            foreach (Shop shop in shops)
+            // Example rewards for defeating bosses
+            defaultConfig[NPCID.EyeofCthulhu] = new BossReward
             {
-                args.Player.SendInfoMessage($"ID: {shop.Id} | Owner: {TShock.Players[shop.OwnerId].Name} | Name: {shop.Name}");
-            }
+                ItemID = ItemID.GoldCoin,
+                Amount = 10,
+                Message = "You received 10 gold coins for defeating the Eye of Cthulhu!"
+            };
+
+            defaultConfig[NPCID.EaterofWorldsHead] = new BossReward
+            {
+                ItemID = ItemID.IronSkinPotion,
+                Amount = 5,
+                Message = "You received 5 Ironskin Potions for defeating the Eater of Worlds!"
+            };
+
+            // Add more entries for other bosses and their respective rewards
+            defaultConfig[NPCID.SkeletronHead] = new BossReward
+            {
+                ItemID = ItemID.ManaCrystal,
+                Amount = 1,
+                Message = "You received 1 Mana Crystal for defeating Skeletron!"
+            };
+
+            defaultConfig[NPCID.WallofFlesh] = new BossReward
+            {
+                ItemID = ItemID.WormholePotion,
+                Amount = 3,
+                Message = "You received 3 Wormhole Potions for defeating the Wall of Flesh!"
+            };
+
+            return defaultConfig;
         }
 
-        private void BuyItem(CommandArgs args)
+        private void OnNpcKilled(NpcKilledEventArgs args)
         {
-            int playerId = args.Player.Index;
-
-            if (args.Parameters.Count < 2)
-            {
-                args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /shopbuy [shop id] [item id]");
+            Player player = TShock.Players[args.PlayerId];
+            if (player == null || !player.Active)
                 return;
-            }
 
-            int shopId;
-            if (!int.TryParse(args.Parameters[0], out shopId))
+            int npcType = args.npc.netID;
+
+            if (bossRewards.ContainsKey(npcType))
             {
-                args.Player.SendErrorMessage("Invalid shop ID!");
-                return;
+                BossReward reward = bossRewards[npcType];
+                player.GiveItem(reward.ItemID, reward.Amount);
+                player.SendSuccessMessage(reward.Message);
             }
-
-            int itemId;
-            if (!int.TryParse(args.Parameters[1], out itemId))
-            {
-                args.Player.SendErrorMessage("Invalid item ID!");
-                return;
-            }
-
-            if (!playerShops.ContainsKey(shopId))
-            {
-                args.Player.SendErrorMessage("Invalid shop ID!");
-                return;
-            }
-
-            Shop shop = playerShops[shopId];
-
-            if (!shop.ContainsItem(itemId))
-            {
-                args.Player.SendErrorMessage("Invalid item ID!");
-                return;
-            }
-
-            ShopItem item = shop.GetItem(itemId);
-            int price = item.Price;
-
-            if (args.Player.BankAccount.Balance < price)
-            {
-                args.Player.SendErrorMessage("Insufficient funds!");
-                return;
-            }
-
-            TSPlayer shopOwner = TShock.Players[shop.OwnerId];
-            if (shopOwner == null)
-            {
-                args.Player.SendErrorMessage("Shop owner is not online.");
-                return;
-            }
-
-            var purchasedItem = TShock.Utils.GetItemById(item.ItemId);
-
-            if (purchasedItem.stack + args.Player.GiveItemCheck(item.ItemId, purchasedItem.name, purchasedItem.width, purchasedItem.height, item.Price) > purchasedItem.maxStack)
-            {
-                args.Player.SendErrorMessage("You don't have enough inventory space to buy this item.");
-                return;
-            }
-
-            args.Player.GiveItemCheck(item.ItemId, purchasedItem.name, purchasedItem.width, purchasedItem.height, item.Price);
-            args.Player.BankAccount.TransferTo(price, shopOwner.BankAccount);
-            args.Player.SendSuccessMessage($"You bought {purchasedItem.name} from {shopOwner.Name} for {price} coins.");
-            shopOwner.SendInfoMessage($"{args.Player.Name} bought {purchasedItem.name} for {price} coins from your shop.");
-
-            if (shop.IsEmpty())
-            {
-                playerShops.Remove(shopId);
-                SaveConfig();
-            }
-        }
-
-        private void ReceiveMoney(CommandArgs args)
-        {
-            if (args.Parameters.Count < 1)
-            {
-                args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /shopreceive [amount]");
-                return;
-            }
-
-            int amount;
-            if (!int.TryParse(args.Parameters[0], out amount))
-            {
-                args.Player.SendErrorMessage("Invalid amount!");
-                return;
-            }
-
-            args.Player.BankAccount.Deposit(amount);
-            args.Player.SendSuccessMessage($"Received {amount} coins in your bank account.");
-        }
-
-        private void ShowLeaderboard(CommandArgs args)
-        {
-            List<Shop> shops = new List<Shop>(playerShops.Values);
-            if (shops.Count == 0)
-            {
-                args.Player.SendInfoMessage("There are no player shops available.");
-                return;
-            }
-
-            shops.Sort((shop1, shop2) => shop2.Sales.CompareTo(shop1.Sales));
-
-            args.Player.SendInfoMessage("---- Player Shop Leaderboard ----");
-            int rank = 1;
-            foreach (Shop shop in shops)
-            {
-                args.Player.SendInfoMessage($"#{rank}: {TShock.Players[shop.OwnerId].Name} | Sales: {shop.Sales}");
-                rank++;
-            }
-        }
-
-        private void ShopInfo(CommandArgs args)
-        {
-            if (args.Parameters.Count < 1)
-            {
-                args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /shopinfo [shop id]");
-                return;
-            }
-
-            int shopId;
-            if (!int.TryParse(args.Parameters[0], out shopId))
-            {
-                args.Player.SendErrorMessage("Invalid shop ID!");
-                return;
-            }
-
-            if (!playerShops.ContainsKey(shopId))
-            {
-                args.Player.SendErrorMessage("Invalid shop ID!");
-                return;
-            }
-
-            Shop shop = playerShops[shopId];
-            args.Player.SendInfoMessage($"Shop Info - ID: {shop.Id} | Owner: {TShock.Players[shop.OwnerId].Name} | Name: {shop.Name}");
-            args.Player.SendInfoMessage("---- Shop Items ----");
-            foreach (ShopItem item in shop.Items)
-            {
-                var shopItem = TShock.Utils.GetItemById(item.ItemId);
-                args.Player.SendInfoMessage($"Item ID: {item.ItemId} | Item Name: {shopItem.name} | Price: {item.Price}");
-            }
-        }
-
-        private void CheckBalance(CommandArgs args)
-        {
-            // Assuming the player's bank account is accessed through the "BankAccount" property
-            var bankAccount = args.Player.BankAccount;
-        
-            // Assuming the "Balance" property is used to get the account balance
-            var balance = bankAccount.Balance;
-        
-            args.Player.SendSuccessMessage($"Your bank account balance: {balance} coins.");
-        }
-
-        private void LoadConfig()
-        {
-            string path = Path.Combine(TShock.SavePath, "playershops.json");
-            if (File.Exists(path))
-            {
-                string json = File.ReadAllText(path);
-                playerShops = JsonConvert.DeserializeObject<Dictionary<int, Shop>>(json);
-            }
-        }
-
-        private void SaveConfig()
-        {
-            string path = Path.Combine(TShock.SavePath, "playershops.json");
-            string json = JsonConvert.SerializeObject(playerShops, Formatting.Indented);
-            File.WriteAllText(path, json);
         }
     }
 
-    public class Shop
+    public class BossReward
     {
-        public int Id { get; set; }
-        public string Name { get; set; }
-        public int OwnerId { get; set; }
-        public List<ShopItem> Items { get; set; }
-        public int Sales { get; set; }
-
-        public Shop(int id, string name, int ownerId)
-        {
-            Id = id;
-            Name = name;
-            OwnerId = ownerId;
-            Items = new List<ShopItem>();
-        }
-
-        public void AddItem(ShopItem item)
-        {
-            Items.Add(item);
-        }
-
-        public bool RemoveItem(int itemId)
-        {
-            ShopItem item = Items.Find(i => i.ItemId == itemId);
-            if (item != null)
-            {
-                Items.Remove(item);
-                return true;
-            }
-            return false;
-        }
-
-        public bool ContainsItem(int itemId)
-        {
-            return Items.Exists(i => i.ItemId == itemId);
-        }
-
-        public ShopItem GetItem(int itemId)
-        {
-            return Items.Find(i => i.ItemId == itemId);
-        }
-
-        public bool IsEmpty()
-        {
-            return Items.Count == 0;
-        }
-    }
-
-    public class ShopItem
-    {
-        public int ItemId { get; set; }
-        public int Price { get; set; }
-
-        public ShopItem(int itemId, int price)
-        {
-            ItemId = itemId;
-            Price = price;
-        }
+        public int ItemID { get; set; }
+        public int Amount { get; set; }
+        public string Message { get; set; }
     }
 }
