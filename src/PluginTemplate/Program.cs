@@ -116,13 +116,13 @@ namespace PlayerShopsPlugin
 
             Shop shop = playerShops[playerId];
             var item = TShock.Utils.GetItemByIdOrName(itemName);
-            if (item.type == 0)
+            if (item.ItemType == 0)
             {
                 args.Player.SendErrorMessage("Invalid item name!");
                 return;
             }
 
-            shop.AddItem(new ShopItem(item.netID, price));
+            shop.AddItem(new ShopItem(item.ItemID, price));
             args.Player.SendSuccessMessage($"Item '{item.name}' added to your shop.");
             SaveConfig();
         }
@@ -146,13 +146,13 @@ namespace PlayerShopsPlugin
             string itemName = args.Parameters[0];
             Shop shop = playerShops[playerId];
             var item = TShock.Utils.GetItemByIdOrName(itemName);
-            if (item.type == 0)
+            if (item.ItemType == 0)
             {
                 args.Player.SendErrorMessage("Invalid item name!");
                 return;
             }
 
-            if (shop.RemoveItem(item.netID))
+            if (shop.RemoveItem(item.ItemID))
             {
                 args.Player.SendSuccessMessage($"Item '{item.name}' removed from your shop.");
                 SaveConfig();
@@ -220,7 +220,7 @@ namespace PlayerShopsPlugin
             ShopItem item = shop.GetItem(itemId);
             int price = item.Price;
 
-            if (args.Player.BankAccount().Balance < price)
+            if (args.Player.BankAccount.Balance < price)
             {
                 args.Player.SendErrorMessage("Insufficient funds!");
                 return;
@@ -242,7 +242,7 @@ namespace PlayerShopsPlugin
             }
 
             args.Player.GiveItemCheck(item.ItemId, purchasedItem.name, purchasedItem.width, purchasedItem.height, item.Price);
-            args.Player.BankAccount().TransferTo(price, shopOwner.BankAccount());
+            args.Player.BankAccount.TransferTo(price, shopOwner.BankAccount);
             args.Player.SendSuccessMessage($"You bought {purchasedItem.name} from {shopOwner.Name} for {price} coins.");
             shopOwner.SendInfoMessage($"{args.Player.Name} bought {purchasedItem.name} for {price} coins from your shop.");
 
@@ -268,7 +268,7 @@ namespace PlayerShopsPlugin
                 return;
             }
 
-            args.Player.BankAccount().Deposit(amount);
+            args.Player.BankAccount.Deposit(amount);
             args.Player.SendSuccessMessage($"Received {amount} coins in your bank account.");
         }
 
@@ -325,7 +325,13 @@ namespace PlayerShopsPlugin
 
         private void CheckBalance(CommandArgs args)
         {
-            args.Player.SendSuccessMessage($"Your bank account balance: {args.Player.BankAccount().Balance} coins.");
+            // Assuming the player's bank account is accessed through the "BankAccount" property
+            var bankAccount = args.Player.BankAccount;
+        
+            // Assuming the "Balance" property is used to get the account balance
+            var balance = bankAccount.Balance;
+        
+            args.Player.SendSuccessMessage($"Your bank account balance: {balance} coins.");
         }
 
         private void LoadConfig()
