@@ -9,6 +9,12 @@ using Newtonsoft.Json.Linq;
 
 namespace ServerStatusPlugin
 {
+    public class ServerStatusConfig
+    {
+        public string ApiUrl { get; set; } = "https://your-terraria-server-api-url";
+        public string GeneratedUrl { get; set; } = "";
+    }
+
     [ApiVersion(2, 1)]
     public class ServerStatusPlugin : TerrariaPlugin
     {
@@ -23,8 +29,8 @@ namespace ServerStatusPlugin
 
         public override void Initialize()
         {
-            TShockAPI.Hooks.GeneralHooks.ReloadEvent += OnReload;
-            TShockAPI.Hooks.PlayerHooks.PlayerPostLogin += OnPlayerPostLogin;
+            GeneralHooks.ReloadEvent += OnReload;
+            PlayerHooks.PlayerPostLogin += OnPlayerPostLogin;
 
             SetupConfig();
         }
@@ -33,8 +39,8 @@ namespace ServerStatusPlugin
         {
             if (disposing)
             {
-                TShockAPI.Hooks.GeneralHooks.ReloadEvent -= OnReload;
-                TShockAPI.Hooks.PlayerHooks.PlayerPostLogin -= OnPlayerPostLogin;
+                GeneralHooks.ReloadEvent -= OnReload;
+                PlayerHooks.PlayerPostLogin -= OnPlayerPostLogin;
             }
             base.Dispose(disposing);
         }
@@ -79,17 +85,17 @@ namespace ServerStatusPlugin
             if (!File.Exists(configPath))
             {
                 _config = new ServerStatusConfig();
-                File.WriteAllText(configPath, JsonConvert.SerializeObject(_config, Formatting.Indented));
+                File.WriteAllText(configPath, Newtonsoft.Json.JsonConvert.SerializeObject(_config, Newtonsoft.Json.Formatting.Indented));
             }
             else
             {
-                _config = JsonConvert.DeserializeObject<ServerStatusConfig>(File.ReadAllText(configPath));
+                _config = Newtonsoft.Json.JsonConvert.DeserializeObject<ServerStatusConfig>(File.ReadAllText(configPath));
             }
 
             if (string.IsNullOrWhiteSpace(_config.GeneratedUrl))
             {
                 _config.GeneratedUrl = GenerateServerUrl();
-                File.WriteAllText(configPath, JsonConvert.SerializeObject(_config, Formatting.Indented));
+                File.WriteAllText(configPath, Newtonsoft.Json.JsonConvert.SerializeObject(_config, Newtonsoft.Json.Formatting.Indented));
             }
         }
 
