@@ -33,6 +33,8 @@ namespace ServerStatusPlugin
             PlayerHooks.PlayerPostLogin += OnPlayerPostLogin;
 
             SetupConfig();
+
+            CheckServerStatusToBroadcast();
         }
 
         protected override void Dispose(bool disposing)
@@ -69,7 +71,7 @@ namespace ServerStatusPlugin
                         ? "Server Status: Online"
                         : "Server Status: Offline";
 
-                    TShock.Utils.Broadcast(statusMessage, Color.Green);
+                    player.SendInfoMessage(statusMessage);
                 }
                 catch (Exception ex)
                 {
@@ -101,8 +103,17 @@ namespace ServerStatusPlugin
 
         private string GenerateServerUrl()
         {
-            // Logic to generate the URL based on your needs
-            return "https://your-terraria-server-url";
+            string serverIp = TShock.Utils.GetIp();
+            int serverPort = TShock.Config.Settings.Port;
+
+            return $"http://{serverIp}:{serverPort}";
+        }
+
+        private void CheckServerStatusToBroadcast()
+        {
+            string statusMessage = GetServerStatusMessage(); // Replace this with your own logic
+
+            TShock.Utils.Broadcast(statusMessage, Color.Green);
         }
     }
 }
