@@ -1,119 +1,52 @@
-using System;
-using System.IO;
-using System.Net.Http;
 using Terraria;
 using TShockAPI;
-using TShockAPI.Hooks;
 using TerrariaApi.Server;
-using Newtonsoft.Json.Linq;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
-namespace ServerStatusPlugin
+namespace PlayerListPlugin
 {
-    public class ServerStatusConfig
-    {
-        public string ApiUrl { get; set; } = "https://your-terraria-server-api-url";
-        public string GeneratedUrl { get; set; } = "";
-    }
-
     [ApiVersion(2, 1)]
-    public class ServerStatusPlugin : TerrariaPlugin
+    public class PlayerListPlugin : TerrariaPlugin
     {
-        private ServerStatusConfig _config;
+        private List<string> joinedPlayers = new List<string>();
 
-        public override string Author => "Your Name";
-        public override string Description => "Displays server status from your website.";
-        public override string Name => "ServerStatusPlugin";
-        public override Version Version => new Version(1, 0, 0);
+        public override string Name => "PlayerListPlugin";
+        public override Version Version => new Version(1, 1, 0);
+        public override string Author => "YourName";
+        public override string Description => "Lists players who have joined the server.";
 
-        public ServerStatusPlugin(Main game) : base(game) { }
+        public PlayerListPlugin(Main game) : base(game) { }
 
         public override void Initialize()
         {
-            GeneralHooks.ReloadEvent += OnReload;
-            PlayerHooks.PlayerPostLogin += OnPlayerPostLogin;
-
-            SetupConfig();
-
-            CheckServerStatusToBroadcast();
+            ServerApi.Hooks.ServerJoin.Register(this, OnJoin);
+            ServerApi.Hooks.ServerLeave.Register(this, OnLeave);
+            Commands.ChatCommands.Add(new Command("playerlist.list", ListPlayers, "list"));
         }
 
-        protected override void Dispose(bool disposing)
+        private void OnJoin(JoinEventArgs e)
         {
-            if (disposing)
+            if (TShock.Players[e.Who] != null && TShock.Players[e.Who].Active)
             {
-                GeneralHooks.ReloadEvent -= OnReload;
-                PlayerHooks.PlayerPostLogin -= OnPlayerPostLogin;
-            }
-            base.Dispose(disposing);
-        }
-
-        private void OnReload(ReloadEventArgs args)
-        {
-            SetupConfig();
-        }
-
-        private void OnPlayerPostLogin(PlayerPostLoginEventArgs args)
-        {
-            CheckServerStatus(args.Player);
-        }
-
-        private async void CheckServerStatus(TSPlayer player)
-        {
-            using (var httpClient = new HttpClient())
-            {
-                try
-                {
-                    var response = await httpClient.GetStringAsync(_config.ApiUrl);
-                    var jsonResponse = JObject.Parse(response);
-                    var serverStatus = jsonResponse["status"].ToString();
-
-                    string statusMessage = serverStatus == "online"
-                        ? "Server Status: Online"
-                        : "Server Status: Offline";
-
-                    player.SendInfoMessage(statusMessage);
-                }
-                catch (Exception ex)
-                {
-                    TShock.Log.Error(ex.ToString());
-                }
+                joinedPlayers.Add(TShock.Players[e.Who].Name);
             }
         }
 
-        private void SetupConfig()
+        private void OnLeave(LeaveEventArgs e)
         {
-            string configPath = Path.Combine(TShock.SavePath, "ServerStatusConfig.json");
-
-            if (!File.Exists(configPath))
+            if (TShock.Players[e.Who] != null && TShock.Players[e.Who].Active)
             {
-                _config = new ServerStatusConfig();
-                File.WriteAllText(configPath, Newtonsoft.Json.JsonConvert.SerializeObject(_config, Newtonsoft.Json.Formatting.Indented));
-            }
-            else
-            {
-                _config = Newtonsoft.Json.JsonConvert.DeserializeObject<ServerStatusConfig>(File.ReadAllText(configPath));
-            }
-
-            if (string.IsNullOrWhiteSpace(_config.GeneratedUrl))
-            {
-                _config.GeneratedUrl = GenerateServerUrl();
-                File.WriteAllText(configPath, Newtonsoft.Json.JsonConvert.SerializeObject(_config, Newtonsoft.Json.Formatting.Indented));
+                joinedPlayers.Remove(TShock.Players[e.Who].Name);
             }
         }
 
-        private string GenerateServerUrl()
+        private void ListPlayers(CommandArgs args)
         {
-            string serverIp = TShock.Utils.GetIp();
-            int serverPort = TShock.Config.Settings.Port;
-
-            return $"http://{serverIp}:{serverPort}";
-        }
-
-        private void CheckServerStatusToBroadcast()
-        {
-            string statusMessage = GetServerStatusMessage(); // Replace this with your own logic
-
-            TShock.Utils.Broadcast(statusMessage, Color.Green);
+            int playerCount = TShock.Players.Where(p => p != null && p.Active).Count();
+            string playerNames = string.Join(", ", joinedPlayers);
+            args.Player.SendInfoMessage($"Players ({playerCount}): {playerNames}");
         }
     }
 }
