@@ -39,13 +39,16 @@ namespace PlayerListPlugin
         }
 
         private void ListAllPlayers(CommandArgs args)
-        {
-            TSPlayer.All.SendInfoMessage("All registered players on the server:");
+{
+    TSPlayer.All.SendInfoMessage("All registered players on the server:");
 
-            foreach (TShockUser user in TShock.Users.GetAllUsers())
-            {
-                TSPlayer.All.SendInfoMessage(user.Name);
-            }
+    foreach (TSPlayer player in TShock.Players)
+    {
+        if (player != null && player.IsLoggedIn)
+        {
+            TSPlayer.All.SendInfoMessage(player.Name);
         }
     }
+}
+
 }
