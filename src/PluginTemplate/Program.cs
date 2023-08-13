@@ -1,9 +1,8 @@
-using Terraria;
-using TShockAPI;
-using TerrariaApi.Server;
 using System;
-using System.Collections.Generic;
-using System.Linq;
+using Terraria;
+using TerrariaApi.Server;
+using TShockAPI;
+using TShockAPI.Hooks;
 
 namespace PlayerListPlugin
 {
@@ -11,8 +10,8 @@ namespace PlayerListPlugin
     public class PlayerListPlugin : TerrariaPlugin
     {
         public override string Name => "PlayerListPlugin";
-        public override string Author => "YourName";
-        public override string Description => "A plugin to list players who joined the server.";
+        public override string Author => "Blackwolf";
+        public override string Description => "A plugin to list registered players on the server.";
         public override Version Version => new Version(1, 0, 0);
 
         public PlayerListPlugin(Main game) : base(game)
@@ -21,13 +20,31 @@ namespace PlayerListPlugin
 
         public override void Initialize()
         {
-            TShockAPI.Commands.ChatCommands.Add(new Command("playerlist.list", ListPlayers, "list"));
-            TShockAPI.Commands.ChatCommands.Add(new Command("playerlist.all", ListAllPlayers, "listall"));
+            ServerApi.Hooks.GameInitialize.Register(this, OnInitialize);
         }
 
-        private void ListPlayers(CommandArgs args)
+        protected override void Dispose(bool disposing)
         {
-            TSPlayer.All.SendInfoMessage("Players who joined previously:");
+            if (disposing)
+            {
+                ServerApi.Hooks.GameInitialize.Deregister(this, OnInitialize);
+            }
+            base.Dispose(disposing);
+        }
+
+        private void OnInitialize(EventArgs args)
+        {
+            TShockAPI.Commands.ChatCommands.Add(new Command("playerlist.listall", ListAllPlayers, "listall"));
+        }
+
+        private void ListAllPlayers(CommandArgs args)
+        {
+            if (args.Player == null)
+            {
+                return;
+            }
+
+            TSPlayer.All.SendInfoMessage("All registered players on the server:");
 
             foreach (TSPlayer player in TShock.Players)
             {
@@ -37,18 +54,5 @@ namespace PlayerListPlugin
                 }
             }
         }
-
-        private void ListAllPlayers(CommandArgs args)
-{
-    TSPlayer.All.SendInfoMessage("All registered players on the server:");
-
-    foreach (TSPlayer player in TShock.Players)
-    {
-        if (player != null && player.IsLoggedIn)
-        {
-            TSPlayer.All.SendInfoMessage(player.Name);
-        }
     }
-}
-
 }
