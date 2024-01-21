@@ -355,7 +355,5 @@ namespace ZombieSurvival
                 playerZombieKills.Clear();
                 playerZombieDeaths.Clear();
                 playerScore.Clear();
-            });
+            })
         }
-    }
-}
