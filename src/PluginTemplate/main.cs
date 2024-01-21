@@ -270,7 +270,6 @@ namespace ZombieSurvival
 
         private void OnStartZombieSurvivalCommand(CommandArgs args)
         {
-           ```vbnet
             if (!args.Player.HasPermission("zombiesurvival.command.startzombiesurvival"))
             {
                 args.Player.SendErrorMessage("You do not have permission to use this command.");
@@ -317,7 +316,6 @@ namespace ZombieSurvival
                     }
 
                     playerZombieKills.Clear();
-                ```vbnet
             if (!args.Player.HasPermission("zombiesurvival.command.startzombiesurvival"))
             {
                 args.Player.SendErrorMessage("You do not have permission to use this command.");
