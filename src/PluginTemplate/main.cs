@@ -323,3 +323,5 @@ private void OnStartZombieSurvivalCommand(CommandEventArgs args)
         });
     });
  }
+}
+}
