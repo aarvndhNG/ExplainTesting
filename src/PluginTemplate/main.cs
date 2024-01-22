@@ -322,4 +322,4 @@ private void OnStartZombieSurvivalCommand(CommandEventArgs args)
             playerScore.Clear();
         });
     });
-}
+ }
