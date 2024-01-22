@@ -192,168 +192,134 @@ namespace ZombieSurvival
                 playerScore[playerIndex] += 2000;
             }
         }
+        private void OnZombieKillsCommand(CommandEventArgs args)
+    {  
+           if (!args.Player.HasPermission("zombiesurvival.command.zombiekills"))
+    {
+        args.Player.SendErrorMessage("You do not have permission to use this command.");
+        return;
+    }
 
-        private void OnZombieKillsCommand(CommandArgs args)
+    if (args.Parameters.Count < 1)
+    {
+        args.Player.SendErrorMessage("Usage: /zombiekills [player]");
+        return;
+    }
+
+    var targetPlayer = TShock.Utils.FindPlayer(args.Parameters[0]);
+
+    if (targetPlayer == null)
+    {
+        args.Player.SendErrorMessage("Player not found.");
+        return;
+    }
+
+    var kills = playerZombieKills[targetPlayer.Index];
+    args.Player.SendSuccessMessage($"{targetPlayer.Name} has killed {kills} zombies.");
+}
+
+private void OnZombieDeathsCommand(CommandEventArgs args)
+{
+    if (!args.Player.HasPermission("zombiesurvival.command.zombiedeaths"))
+    {
+        args.Player.SendErrorMessage("You do not have permission to use this command.");
+        return;
+    }
+
+    if (args.Parameters.Count < 1)
+    {
+        args.Player.SendErrorMessage("Usage: /zombiedeaths [player]");
+        return;
+    }
+
+    var targetPlayer = TShock.Utils.FindPlayer(args.Parameters[0]);
+
+    if (targetPlayer == null)
+    {
+        args.Player.SendErrorMessage("Player not found.");
+        return;
+    }
+
+    var deaths = playerZombieDeaths[targetPlayer.Index];
+    args.Player.SendSuccessMessage($"{targetPlayer.Name} has died {deaths} times to zombies.");
+}
+
+private void OnPlayerScoreCommand(CommandEventArgs args)
+{
+    if (!args.Player.HasPermission("zombiesurvival.command.playerscore"))
+    {
+        args.Player.SendErrorMessage("You do not have permission to use this command.");
+        return;
+    }
+
+    if (args.Parameters.Count < 1)
+    {
+        args.Player.SendErrorMessage("Usage: /playerscore [player]");
+        return;
+    }
+
+    var targetPlayer = TShock.Utils.FindPlayer(args.Parameters[0]);
+
+    if (targetPlayer == null)
+    {
+        args.Player.SendErrorMessage("Player not found.");
+        return;
+    }
+
+    var score = playerScore[targetPlayer.Index];
+    args.Player.SendSuccessMessage($"{targetPlayer.Name}'s score is {score}.");
+}
+private void OnStartZombieSurvivalCommand(CommandEventArgs args)
+{
+    if (!args.Player.HasPermission("zombiesurvival.command.startzombiesurvival"))
+    {
+        args.Player.SendErrorMessage("You do not have permission to use this command.");
+        return;
+    }
+
+    if (args.Parameters.Count < 1)
+    {
+        args.Player.SendErrorMessage("Usage: /startzombiesurvival [duration]");
+        return;
+    }
+
+    if (!int.TryParse(args.Parameters[0], out var duration))
+    {
+        args.Player.SendErrorMessage("Invalid duration.");
+        return;
+    }
+
+    TShock.Players.Broadcast("Zombie survival minigame starting in 10 seconds!", Color.Yellow);
+    TShock.Utils.Broadcast("Zombie survival minigame starting in 10 seconds!", 10);
+    TShock.Utils.Broadcast("Zombie survival minigame starting in 5 seconds!", 5);
+    TShock.Utils.Broadcast("Zombie survival minigame starting in 3...2...1...GO!", 3);
+
+    TShock.Scheduler.Schedule(TimeSpan.FromSeconds(10), () =>
+    {
+        TShock.Players.Broadcast("Zombie survival minigame has started!", Color.Yellow);
+        TShock.Scheduler.Schedule(TimeSpan.FromMinutes(duration), () =>
         {
-            if (!args.Player.HasPermission("zombiesurvival.command.zombiekills"))
+            TShock.Players.Broadcast("Zombie survival minigame has ended!", Color.Yellow);
+            TShock.Utils.Broadcast("Zombie survival minigame has ended!", 10);
+
+            int maxScore = playerScore.Values.Max();
+            int winnerIndex = playerScore.FirstOrDefault(p => p.Value == maxScore).Key;
+
+            if (winnerIndex != -1)
             {
-                args.Player.SendErrorMessage("You do not have permission to use this command.");
-                return;
+                var winner = TShock.Players[winnerIndex];
+                TShock.Players.Broadcast($"{winner.Name} is the winner with a score of {maxScore}!", Color.Yellow);
+                TShock.Utils.Broadcast($"{winner.Name} is the winner with a score of {maxScore}!", 10);
+            }
+            else
+            {
+                TShock.Players.Broadcast("No winner this time. Better luck next time!", Color.Yellow);
+                TShock.Utils.Broadcast("No winner this time. Better luck next time!", 10);
             }
 
-            if (args.Parameters.Length < 1)
-            {
-                args.Player.SendErrorMessage("Usage: /zombiekills [player]");
-                return;
-            }
-
-            TShockAPI.TSPlayer targetPlayer = TShock.Players.FindPlayer(args.Parameters[0]);
-            if (targetPlayer == null)
-            {
-                args.Player.SendErrorMessage("Player not found.");
-                return;
-            }
-
-            int kills = playerZombieKills[targetPlayer.Index];
-            args.Player.SendMessage("{0} has killed {1} zombies.", targetPlayer.Name, kills);
-        }
-
-        private void OnZombieDeathsCommand(CommandArgs args)
-        {
-            if (!args.Player.HasPermission("zombiesurvival.command.zombiedeaths"))
-            {
-                args.Player.SendErrorMessage("You do not have permission to use this command.");
-                return;
-            }
-
-            if (args.Parameters.Length < 1)
-            {
-                args.Player.SendErrorMessage("Usage: /zombiedeaths [player]");
-                return;
-            }
-
-            TShockAPI.TSPlayer targetPlayer = TShock.Players.FindPlayer(args.Parameters[0]);
-            if (targetPlayer == null)
-            {
-                args.Player.SendErrorMessage("Player not found.");
-                return;
-            }
-
-            int deaths = playerZombieDeaths[targetPlayer.Index];
-            args.Player.SendMessage("{0} has died {1} times to zombies.", targetPlayer.Name, deaths);
-        }
-
-        private void OnPlayerScoreCommand(CommandArgs args)
-        {
-            if (!args.Player.HasPermission("zombiesurvival.command.playerscore"))
-            {
-                args.Player.SendErrorMessage("You do not have permission to use this command.");
-                return;
-            }
-
-            if (args.Parameters.Length < 1)
-            {
-                args.Player.SendErrorMessage("Usage: /playerscore [player]");
-                return;
-            }
-
-            TShockAPI.TSPlayer targetPlayer = TShock.Players.FindPlayer(args.Parameters[0]);
-            if (targetPlayer == null)
-            {
-                args.Player.SendErrorMessage("Player not found.");
-                return;
-            }
-
-            int score = playerScore[targetPlayer.Index];
-            args.Player.SendMessage("{0}'s score is {1}.", targetPlayer.Name, score);
-        }
-
-        private void OnStartZombieSurvivalCommand(CommandArgs args)
-        {
-            if (!args.Player.HasPermission("zombiesurvival.command.startzombiesurvival"))
-            {
-                args.Player.SendErrorMessage("You do not have permission to use this command.");
-                return;
-            }
-
-            if (args.Parameters.Length < 1)
-            {
-                args.Player.SendErrorMessage("Usage: /startzombiesurvival [duration]");
-                return;
-            }
-
-            int duration;
-            if (!int.TryParse(args.Parameters[0], out duration))
-            {
-                args.Player.SendErrorMessage("Invalid duration.");
-                return;
-            }
-
-            TShock.Players.Broadcast("Zombie survival minigame starting in 10 seconds!", Color.Yellow);
-            TShock.Utils.Broadcast(string.Format("Zombie survival minigame will last for {0} minutes.", duration), Color.Yellow);
-            TShock.Utils.Broadcast("Kill as many zombies as you can to earn points!", Color.Yellow);
-            TShock.Utils.Broadcast("The player with the most points at the end of the minigame will be the winner!", Color.Yellow);
-
-            TShock.Scheduler.Schedule(TimeSpan.FromSeconds(10), () =>
-            {
-                TShock.Players.Broadcast("Zombie survival minigame has started!", Color.Yellow);
-                TShock.Scheduler.Schedule(TimeSpan.FromMinutes(duration), () =>
-                {
-                    TShock.Players.Broadcast("Zombie survival minigame has ended!", Color.Yellow);
-
-                    int maxScore = playerScore.Values.Max();
-                    List<KeyValuePair<int, int>> winners = playerScore.Where(kvp => kvp.Value == maxScore).ToList();
-
-                    if (winners.Count == 1)
-                    {
-                        TShockAPI.TSPlayer winner = TShock.Players[winners[0].Key];
-                        TShock.Players.Broadcast(string.Format("{0} is the winner with a score of {1}!", winner.Name, maxScore), Color.Yellow);
-                    }
-                    else
-                    {
-                        string winnersList = string.Join(", ", winners.Select(kvp => TShock.Players[kvp.Key].Name));
-                        TShock.Players.Broadcast(string.Format("{0} are the winners with a score of {1}!", winnersList, maxScore), Color.Yellow);
-                    }
-
-                    playerZombieKills.Clear();
-            if (!args.Player.HasPermission("zombiesurvival.command.startzombiesurvival"))
-            {
-                args.Player.SendErrorMessage("You do not have permission to use this command.");
-                return;
-            }
-
-            if (args.Parameters.Length < 1)
-            {
-                args.Player.SendErrorMessage("Usage: /startzombiesurvival [duration]");
-                return;
-            }
-
-            int duration;
-            if (!int.TryParse(args.Parameters[0], out duration))
-            {
-                args.Player.SendErrorMessage("Invalid duration.");
-                return;
-            }
-
-            TShock.Players.Broadcast("Zombie survival minigame starting in 10 seconds!", Color.Yellow);
-            TShock.Utils.Broadcast("Zombie survival minigame starting in 10 seconds!", 10);
-            TShock.Utils.Broadcast("Zombie survival minigame starting in 5 seconds!", 5);
-            TShock.Utils.Broadcast("Zombie survival minigame starting in 3...2...1...GO!", 3);
-
-            TShock.Scheduler.Schedule(TimeSpan.FromSeconds(duration), () =>
-            {
-                TShock.Players.Broadcast("Zombie survival minigame has ended!", Color.Yellow);
-                TShock.Utils.Broadcast("Zombie survival minigame has ended!", 10);
-
-                int maxScore = playerScore.Values.Max();
-                int winnerIndex = playerScore.FirstOrDefault(p => p.Value == maxScore).Key;
-                TShockAPI.TSPlayer winner = TShock.Players[winnerIndex];
-
-                TShock.Players.Broadcast("{0} is the winner with a score of {1}!", winner.Name, maxScore);
-                TShock.Utils.Broadcast("{0} is the winner with a score of {1}!", winner.Name, maxScore, 10);
-
-                playerZombieKills.Clear();
-                playerZombieDeaths.Clear();
-                playerScore.Clear();
-            })
-        }
+            playerZombieKills.Clear();
+            playerZombieDeaths.Clear();
+            playerScore.Clear();
+        });
+    });
+}
