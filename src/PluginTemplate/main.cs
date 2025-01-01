@@ -1,327 +1,131 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Timers;
 using TShockAPI;
+using Terraria;
+using TerrariaApi.Server;
 
-namespace ZombieSurvival
+namespace TeamDeathmatch
 {
     [ApiVersion(2, 1)]
-    public class ZombieSurvival : TerrariaPlugin
+    public class TeamDeathmatchPlugin : TerrariaPlugin
     {
-        public static Dictionary<int, int> playerZombieKills = new Dictionary<int, int>();
-        public static Dictionary<int, int> playerZombieDeaths = new Dictionary<int, int>();
-        public static Dictionary<int, int> playerScore = new Dictionary<int, int>();
+        public override string Name => "TeamDeathmatch";
+        public override string Author => "Your Name";
+        public override string Description => "A team deathmatch plugin for TShock.";
+        public override Version Version => new Version(1, 0, 0, 0);
+
+        private Timer matchTimer;
+        private int matchDuration = 600; // 10 minutes in seconds
+        private Dictionary<int, int> teamScores;
+        private Dictionary<int, Point> teamSpawns;
+        private List<int> redTeam;
+        private List<int> blueTeam;
+
+        public TeamDeathmatchPlugin(Main game) : base(game)
+        {
+        }
 
         public override void Initialize()
         {
-            ServerApi.Hooks.GameInitialize.Register(this, OnGameInitialize);
-            ServerApi.Hooks.PlayerJoin.Register(this, OnPlayerJoin);
-            ServerApi.Hooks.PlayerLeave.Register(this, OnPlayerLeave);
-            ServerApi.Hooks.NpcKilled.Register(this, OnNpcKilled);
-            ServerApi.Hooks.Command.Register(this, "ZombieKills", OnZombieKillsCommand);
-            ServerApi.Hooks.Command.Register(this, "ZombieDeaths", OnZombieDeathsCommand);
-            ServerApi.Hooks.Command.Register(this, "PlayerScore", OnPlayerScoreCommand);
-            ServerApi.Hooks.Command.Register(this, "StartZombieSurvival", OnStartZombieSurvivalCommand);
+            Commands.ChatCommands.Add(new Command("tdm.setspawn", SetSpawn, "setspawn"));
+            Commands.ChatCommands.Add(new Command("tdm.join", JoinTeam, "join"));
+            Commands.ChatCommands.Add(new Command("tdm.leave", LeaveTeam, "leave"));
+
+            teamScores = new Dictionary<int, int> { { 1, 0 }, { 2, 0 } }; // 1: Red, 2: Blue
+            teamSpawns = new Dictionary<int, Point>();
+
+            redTeam = new List<int>();
+            blueTeam = new List<int>();
+
+            matchTimer = new Timer(1000); // 1 second intervals
+            matchTimer.Elapsed += OnMatchTimerElapsed;
         }
 
-        private void OnGameInitialize(EventArgs args)
+        private void SetSpawn(CommandArgs args)
         {
-            // Initialize any game-wide data here
+            if (args.Parameters.Count != 2 || !(args.Parameters[0] == "red" || args.Parameters[0] == "blue"))
+            {
+                args.Player.SendErrorMessage("Invalid syntax. Use /setspawn <red|blue> <x> <y>");
+                return;
+            }
+
+            int x = args.Player.TileX;
+            int y = args.Player.TileY;
+            int team = args.Parameters[0] == "red" ? 1 : 2;
+            teamSpawns[team] = new Point(x, y);
+            args.Player.SendSuccessMessage($"Spawn point for {args.Parameters[0]} team set at ({x}, {y}).");
         }
 
-        private void OnPlayerJoin(TShockAPI.Hooks.PlayerJoinEventArgs args)
+        private void JoinTeam(CommandArgs args)
         {
-            // Initialize player-specific data here
-            playerZombieKills[args.Player.Index] = 0;
-            playerZombieDeaths[args.Player.Index] = 0;
-            playerScore[args.Player.Index] = 0;
-        }
+            if (args.Parameters.Count != 1 || !(args.Parameters[0] == "red" || args.Parameters[0] == "blue"))
+            {
+                args.Player.SendErrorMessage("Invalid syntax. Use /join <red|blue>");
+                return;
+            }
 
-        private void OnPlayerLeave(TShockAPI.Hooks.PlayerLeaveEventArgs args)
-        {
-            // Clean up player-specific data here
-            playerZombieKills.Remove(args.Player.Index);
-            playerZombieDeaths.Remove(args.Player.Index);
-            playerScore.Remove(args.Player.Index);
-        }
+            if (redTeam.Contains(args.Player.Index) || blueTeam.Contains(args.Player.Index))
+            {
+                args.Player.SendErrorMessage("You are already in a team.");
+                return;
+            }
 
-        private void OnNpcKilled(NpcKilledEventArgs args)
-        {
-            if (args.NPC.type == NPCID.Zombie)
+            int team = args.Parameters[0] == "red" ? 1 : 2;
+            if (team == 1 && redTeam.Count < 4)
             {
-                int playerIndex = args.WhoKilled.Index;
-                playerZombieKills[playerIndex]++;
-                playerScore[playerIndex] += 10;
+                redTeam.Add(args.Player.Index);
+                args.Player.Teleport(teamSpawns[1].X * 16, teamSpawns[1].Y * 16);
+                args.Player.SendSuccessMessage("You have joined the Red team!");
             }
-            else if (args.NPC.type == NPCID.ZombieEskimo)
+            else if (team == 2 && blueTeam.Count < 4)
             {
-                int playerIndex = args.WhoKilled.Index;
-                playerZombieKills[playerIndex]++;
-                playerScore[playerIndex] += 20;
-            }
-            else if (args.NPC.type == NPCID.ZombieViking)
-            {
-                int playerIndex = args.WhoKilled.Index;
-                playerZombieKills[playerIndex]++;
-                playerScore[playerIndex] += 30;
-            }
-            else if (args.NPC.type == NPCID.ZombieWerewolf)
-            {
-                int playerIndex = args.WhoKilled.Index;
-                playerZombieKills[playerIndex]++;
-                playerScore[playerIndex] += 40;
-            }
-            else if (args.NPC.type == NPCID.ZombieBee)
-            {
-                int playerIndex = args.WhoKilled.Index;
-                playerZombieKills[playerIndex]++;
-                playerScore[playerIndex] += 50;
-            }
-            else if (args.NPC.type == NPCID.ZombieBuffalo)
-            {
-                int playerIndex = args.WhoKilled.Index;
-                playerZombieKills[playerIndex]++;
-                playerScore[playerIndex] += 100;
-            }
-            else if (args.NPC.type == NPCID.ZombieMerman)
-            {
-                int playerIndex = args.WhoKilled.Index;
-                playerZombieKills[playerIndex]++;
-                playerScore[playerIndex] += 150;
-            }
-            else if (args.NPC.type == NPCID.ZombieMerchant)
-            {
-                int playerIndex = args.WhoKilled.Index;
-                playerZombieKills[playerIndex]++;
-                playerScore[playerIndex] += 200;
-            }
-            else if (args.NPC.type == NPCID.ZombieChef)
-            {
-                int playerIndex = args.WhoKilled.Index;
-                playerZombieKills[playerIndex]++;
-                playerScore[playerIndex] += 250;
-            }
-            else if (args.NPC.type == NPCID.ZombieDoctor)
-            {
-                int playerIndex = args.WhoKilled.Index;
-                playerZombieKills[playerIndex]++;
-                playerScore[playerIndex] += 300;
-            }
-            else if (args.NPC.type == NPCID.ZombieFisherman)
-            {
-                int playerIndex = args.WhoKilled.Index;
-                playerZombieKills[playerIndex]++;
-                playerScore[playerIndex] += 350;
-            }
-            else if (args.NPC.type == NPCID.ZombieGoblin)
-            {
-                int playerIndex = args.WhoKilled.Index;
-                playerZombieKills[playerIndex]++;
-                playerScore[playerIndex] += 400;
-            }
-            else if (args.NPC.type == NPCID.ZombieGiant)
-            {
-                int playerIndex = args.WhoKilled.Index;
-                playerZombieKills[playerIndex]++;
-                playerScore[playerIndex] += 500;
-            }
-            else if (args.NPC.type == NPCID.ZombieGunner)
-            {
-                int playerIndex = args.WhoKilled.Index;
-                playerZombieKills[playerIndex]++;
-                playerScore[playerIndex] += 600;
-            }
-            else if (args.NPC.type == NPCID.ZombieMartian)
-            {
-                int playerIndex = args.WhoKilled.Index;
-                playerZombieKills[playerIndex]++;
-                playerScore[playerIndex] += 700;
-            }
-            else if (args.NPC.type == NPCID.ZombieNinja)
-            {
-                int playerIndex = args.WhoKilled.Index;
-                playerZombieKills[playerIndex]++;
-                playerScore[playerIndex] += 800;
-            }
-            else if (args.NPC.type == NPCID.ZombiePirate)
-            {
-                int playerIndex = args.WhoKilled.Index;
-                playerZombieKills[playerIndex]++;
-                playerScore[playerIndex] += 900;
-            }
-            else if (args.NPC.type == NPCID.ZombieSanta)
-            {
-                int playerIndex = args.WhoKilled.Index;
-                playerZombieKills[playerIndex]++;
-                playerScore[playerIndex] += 1000;
-            }
-            else if (args.NPC.type == NPCID.ZombieSkeleton)
-            {
-                int playerIndex = args.WhoKilled.Index;
-                playerZombieKills[playerIndex]++;
-                playerScore[playerIndex] += 1100;
-            }
-            else if (args.NPC.type == NPCID.ZombieWitch)
-            {
-                int playerIndex = args.WhoKilled.Index;
-                playerZombieKills[playerIndex]++;
-                playerScore[playerIndex] += 1200;
-            }
-            else if (args.NPC.type == NPCID.ZombieWizard)
-            {
-                int playerIndex = args.WhoKilled.Index;
-                playerZombieKills[playerIndex]++;
-                playerScore[playerIndex] += 1300;
-            }
-            else if (args.NPC.type == NPCID.ZombieWyvern)
-            {
-                int playerIndex = args.WhoKilled.Index;
-                playerZombieKills[playerIndex]++;
-                playerScore[playerIndex] += 1400;
-            }
-            else if (args.NPC.type == NPCID.ZombieYeti)
-            {
-                int playerIndex = args.WhoKilled.Index;
-                playerZombieKills[playerIndex]++;
-                playerScore[playerIndex] += 1500;
-            }
-            else if (args.NPC.type == NPCID.ZombieBoss)
-            {
-                int playerIndex = args.WhoKilled.Index;
-                playerZombieKills[playerIndex]++;
-                playerScore[playerIndex] += 2000;
-            }
-        }
-        private void OnZombieKillsCommand(CommandEventArgs args)
-    {  
-           if (!args.Player.HasPermission("zombiesurvival.command.zombiekills"))
-    {
-        args.Player.SendErrorMessage("You do not have permission to use this command.");
-        return;
-    }
-
-    if (args.Parameters.Count < 1)
-    {
-        args.Player.SendErrorMessage("Usage: /zombiekills [player]");
-        return;
-    }
-
-    var targetPlayer = TShock.Utils.FindPlayer(args.Parameters[0]);
-
-    if (targetPlayer == null)
-    {
-        args.Player.SendErrorMessage("Player not found.");
-        return;
-    }
-
-    var kills = playerZombieKills[targetPlayer.Index];
-    args.Player.SendSuccessMessage($"{targetPlayer.Name} has killed {kills} zombies.");
-}
-
-private void OnZombieDeathsCommand(CommandEventArgs args)
-{
-    if (!args.Player.HasPermission("zombiesurvival.command.zombiedeaths"))
-    {
-        args.Player.SendErrorMessage("You do not have permission to use this command.");
-        return;
-    }
-
-    if (args.Parameters.Count < 1)
-    {
-        args.Player.SendErrorMessage("Usage: /zombiedeaths [player]");
-        return;
-    }
-
-    var targetPlayer = TShock.Utils.FindPlayer(args.Parameters[0]);
-
-    if (targetPlayer == null)
-    {
-        args.Player.SendErrorMessage("Player not found.");
-        return;
-    }
-
-    var deaths = playerZombieDeaths[targetPlayer.Index];
-    args.Player.SendSuccessMessage($"{targetPlayer.Name} has died {deaths} times to zombies.");
-}
-
-private void OnPlayerScoreCommand(CommandEventArgs args)
-{
-    if (!args.Player.HasPermission("zombiesurvival.command.playerscore"))
-    {
-        args.Player.SendErrorMessage("You do not have permission to use this command.");
-        return;
-    }
-
-    if (args.Parameters.Count < 1)
-    {
-        args.Player.SendErrorMessage("Usage: /playerscore [player]");
-        return;
-    }
-
-    var targetPlayer = TShock.Utils.FindPlayer(args.Parameters[0]);
-
-    if (targetPlayer == null)
-    {
-        args.Player.SendErrorMessage("Player not found.");
-        return;
-    }
-
-    var score = playerScore[targetPlayer.Index];
-    args.Player.SendSuccessMessage($"{targetPlayer.Name}'s score is {score}.");
-}
-private void OnStartZombieSurvivalCommand(CommandEventArgs args)
-{
-    if (!args.Player.HasPermission("zombiesurvival.command.startzombiesurvival"))
-    {
-        args.Player.SendErrorMessage("You do not have permission to use this command.");
-        return;
-    }
-
-    if (args.Parameters.Count < 1)
-    {
-        args.Player.SendErrorMessage("Usage: /startzombiesurvival [duration]");
-        return;
-    }
-
-    if (!int.TryParse(args.Parameters[0], out var duration))
-    {
-        args.Player.SendErrorMessage("Invalid duration.");
-        return;
-    }
-
-    TShock.Players.Broadcast("Zombie survival minigame starting in 10 seconds!", Color.Yellow);
-    TShock.Utils.Broadcast("Zombie survival minigame starting in 10 seconds!", 10);
-    TShock.Utils.Broadcast("Zombie survival minigame starting in 5 seconds!", 5);
-    TShock.Utils.Broadcast("Zombie survival minigame starting in 3...2...1...GO!", 3);
-
-    TShock.Scheduler.Schedule(TimeSpan.FromSeconds(10), () =>
-    {
-        TShock.Players.Broadcast("Zombie survival minigame has started!", Color.Yellow);
-        TShock.Scheduler.Schedule(TimeSpan.FromMinutes(duration), () =>
-        {
-            TShock.Players.Broadcast("Zombie survival minigame has ended!", Color.Yellow);
-            TShock.Utils.Broadcast("Zombie survival minigame has ended!", 10);
-
-            int maxScore = playerScore.Values.Max();
-            int winnerIndex = playerScore.FirstOrDefault(p => p.Value == maxScore).Key;
-
-            if (winnerIndex != -1)
-            {
-                var winner = TShock.Players[winnerIndex];
-                TShock.Players.Broadcast($"{winner.Name} is the winner with a score of {maxScore}!", Color.Yellow);
-                TShock.Utils.Broadcast($"{winner.Name} is the winner with a score of {maxScore}!", 10);
+                blueTeam.Add(args.Player.Index);
+                args.Player.Teleport(teamSpawns[2].X * 16, teamSpawns[2].Y * 16);
+                args.Player.SendSuccessMessage("You have joined the Blue team!");
             }
             else
             {
-                TShock.Players.Broadcast("No winner this time. Better luck next time!", Color.Yellow);
-                TShock.Utils.Broadcast("No winner this time. Better luck next time!", 10);
+                args.Player.SendErrorMessage("The selected team is full!");
             }
+        }
 
-            playerZombieKills.Clear();
-            playerZombieDeaths.Clear();
-            playerScore.Clear();
-        });
-    });
- }
-}
+        private void LeaveTeam(CommandArgs args)
+        {
+            if (redTeam.Remove(args.Player.Index) || blueTeam.Remove(args.Player.Index))
+            {
+                args.Player.SendSuccessMessage("You have left your team.");
+            }
+            else
+            {
+                args.Player.SendErrorMessage("You are not part of any team.");
+            }
+        }
+
+        private void OnMatchTimerElapsed(object sender, ElapsedEventArgs e)
+        {
+            matchDuration--;
+            if (matchDuration <= 0)
+            {
+                EndMatch();
+            }
+        }
+
+        private void EndMatch()
+        {
+            matchTimer.Stop();
+
+            string winningTeam = teamScores[1] > teamScores[2] ? "Red" : "Blue";
+            TSPlayer.All.SendInfoMessage($"Match over! {winningTeam} team wins with {Math.Max(teamScores[1], teamScores[2])} kills.");
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                matchTimer.Dispose();
+            }
+            base.Dispose(disposing);
+        }
+    }
 }
