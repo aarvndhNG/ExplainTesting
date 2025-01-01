@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Timers;
 using TShockAPI;
 using Terraria;
@@ -15,7 +16,7 @@ namespace TeamDeathmatch
         public override string Description => "A team deathmatch plugin for TShock.";
         public override Version Version => new Version(1, 0, 0, 0);
 
-        private Timer matchTimer;
+        private System.Timers.Timer matchTimer;
         private int matchDuration = 600; // 10 minutes in seconds
         private Dictionary<int, int> teamScores;
         private Dictionary<int, Point> teamSpawns;
@@ -38,7 +39,7 @@ namespace TeamDeathmatch
             redTeam = new List<int>();
             blueTeam = new List<int>();
 
-            matchTimer = new Timer(1000); // 1 second intervals
+            matchTimer = new System.Timers.Timer(1000); // 1 second intervals
             matchTimer.Elapsed += OnMatchTimerElapsed;
         }
 
@@ -116,7 +117,7 @@ namespace TeamDeathmatch
             matchTimer.Stop();
 
             string winningTeam = teamScores[1] > teamScores[2] ? "Red" : "Blue";
-            TSPlayer.All.SendInfoMessage($"Match over! {winningTeam} team wins with {Math.Max(teamScores[1], teamScores[2])} kills.");
+            TSPlayer.All.SendInfoMessage($"Match over! {winningTeam} team wins with {Math.max(teamScores[1], teamScores[2])} kills.");
         }
 
         protected override void Dispose(bool disposing)
