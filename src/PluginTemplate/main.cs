@@ -1,132 +1,196 @@
 using System;
 using System.Collections.Generic;
-using System.Drawing;
-using System.Timers;
-using TShockAPI;
+using Microsoft.Xna.Framework;
 using Terraria;
 using TerrariaApi.Server;
+using TShockAPI;
 
-namespace TeamDeathmatch
+[ApiVersion(2, 1)]
+public class TDMPlugin : TerrariaPlugin
 {
-    [ApiVersion(2, 1)]
-    public class TeamDeathmatchPlugin : TerrariaPlugin
+    public override string Name => "TeamDeathMatch";
+    public override string Author => "YourName";
+    public override string Description => "A Team Death Match minigame for TShock";
+    public override Version Version => new Version(1, 0);
+
+    public TDMPlugin(Main game) : base(game) { }
+
+    // Data structures to manage the game state
+    private static Dictionary<string, string> playerTeams = new Dictionary<string, string>(); // PlayerName -> TeamName
+    private static Dictionary<string, int> teamScores = new Dictionary<string, int>();       // TeamName -> KillCount
+    private static List<string> teams = new List<string> { "Red", "Blue" };                 // Available teams
+    private static Dictionary<string, Vector2> teamSpawns = new Dictionary<string, Vector2>(); // TeamName -> SpawnPosition
+    private static bool gameActive = false;                                                 // Game state flag
+
+    public override void Initialize()
     {
-        public override string Name => "TeamDeathmatch";
-        public override string Author => "Your Name";
-        public override string Description => "A team deathmatch plugin for TShock.";
-        public override Version Version => new Version(1, 0, 0, 0);
+        // Register commands
+        Commands.ChatCommands.Add(new Command(JoinTeam, "jointeam"));          // No permission required, all players can use
+        Commands.ChatCommands.Add(new Command("tdm.setspawn", SetSpawn, "setspawn")); // Admin-only
+        Commands.ChatCommands.Add(new Command("tdm.start", StartTDM, "starttdm"));    // Admin-only
+        Commands.ChatCommands.Add(new Command("tdm.end", EndTDM, "endtdm"));          // Admin-only
+        Commands.ChatCommands.Add(new Command(TDMStatus, "tdmstatus"));        // No permission required
 
-        private System.Timers.Timer matchTimer;
-        private int matchDuration = 600; // 10 minutes in seconds
-        private Dictionary<int, int> teamScores;
-        private Dictionary<int, Point> teamSpawns;
-        private List<int> redTeam;
-        private List<int> blueTeam;
+        // Register event hooks
+        GetDataHandlers.PlayerDeathEvent += OnPlayerDeath;    // Handle player deaths for scoring
+        GetDataHandlers.PlayerSpawnEvent += OnPlayerSpawn;    // Handle respawns
+        ServerApi.Hooks.ServerLeave.Register(this, OnServerLeave); // Handle player disconnects
+    }
 
-        public TeamDeathmatchPlugin(Main game) : base(game)
+    // Command: /jointeam <team>
+    private void JoinTeam(CommandArgs args)
+    {
+        if (args.Parameters.Count != 1)
         {
+            args.Player.SendErrorMessage("Usage: /jointeam <team>");
+            return;
         }
-
-        public override void Initialize()
+        string team = args.Parameters[0];
+        if (!teams.Contains(team))
         {
-            Commands.ChatCommands.Add(new Command("tdm.setspawn", SetSpawn, "setspawn"));
-            Commands.ChatCommands.Add(new Command("tdm.join", JoinTeam, "join"));
-            Commands.ChatCommands.Add(new Command("tdm.leave", LeaveTeam, "leave"));
-
-            teamScores = new Dictionary<int, int> { { 1, 0 }, { 2, 0 } }; // 1: Red, 2: Blue
-            teamSpawns = new Dictionary<int, Point>();
-
-            redTeam = new List<int>();
-            blueTeam = new List<int>();
-
-            matchTimer = new System.Timers.Timer(1000); // 1 second intervals
-            matchTimer.Elapsed += OnMatchTimerElapsed;
+            args.Player.SendErrorMessage("Invalid team. Available teams: " + string.Join(", ", teams));
+            return;
         }
+        playerTeams[args.Player.Name] = team;
+        args.Player.SendInfoMessage("You joined team " + team);
+    }
 
-        private void SetSpawn(CommandArgs args)
+    // Command: /setspawn <team> (Admin-only)
+    private void SetSpawn(CommandArgs args)
+    {
+        if (!args.Player.HasPermission("tdm.setspawn"))
         {
-            if (args.Parameters.Count != 2 || !(args.Parameters[0] == "red" || args.Parameters[0] == "blue"))
+            args.Player.SendErrorMessage("You don't have permission to set spawn points.");
+            return;
+        }
+        if (args.Parameters.Count != 1)
+        {
+            args.Player.SendErrorMessage("Usage: /setspawn <team>");
+            return;
+        }
+        string team = args.Parameters[0];
+        if (!teams.Contains(team))
+        {
+            args.Player.SendErrorMessage("Invalid team.");
+            return;
+        }
+        teamSpawns[team] = new Vector2(args.Player.TileX, args.Player.TileY);
+        args.Player.SendInfoMessage("Set spawn point for team " + team);
+    }
+
+    // Command: /starttdm (Admin-only)
+    private void StartTDM(CommandArgs args)
+    {
+        if (!args.Player.HasPermission("tdm.start"))
+        {
+            args.Player.SendErrorMessage("You don't have permission to start the game.");
+            return;
+        }
+        // Ensure all teams have spawn points
+        foreach (string team in teams)
+        {
+            if (!teamSpawns.ContainsKey(team))
             {
-                args.Player.SendErrorMessage("Invalid syntax. Use /setspawn <red|blue> <x> <y>");
+                args.Player.SendErrorMessage("Spawn point for team " + team + " is not set.");
                 return;
             }
-
-            int x = args.Player.TileX;
-            int y = args.Player.TileY;
-            int team = args.Parameters[0] == "red" ? 1 : 2;
-            teamSpawns[team] = new Point(x, y);
-            args.Player.SendSuccessMessage($"Spawn point for {args.Parameters[0]} team set at ({x}, {y}).");
         }
-
-        private void JoinTeam(CommandArgs args)
+        gameActive = true;
+        teamScores.Clear();
+        foreach (string team in teams)
         {
-            if (args.Parameters.Count != 1 || !(args.Parameters[0] == "red" || args.Parameters[0] == "blue"))
-            {
-                args.Player.SendErrorMessage("Invalid syntax. Use /join <red|blue>");
-                return;
-            }
-
-            if (redTeam.Contains(args.Player.Index) || blueTeam.Contains(args.Player.Index))
-            {
-                args.Player.SendErrorMessage("You are already in a team.");
-                return;
-            }
-
-            int team = args.Parameters[0] == "red" ? 1 : 2;
-            if (team == 1 && redTeam.Count < 4)
-            {
-                redTeam.Add(args.Player.Index);
-                args.Player.Teleport(teamSpawns[1].X * 16, teamSpawns[1].Y * 16);
-                args.Player.SendSuccessMessage("You have joined the Red team!");
-            }
-            else if (team == 2 && blueTeam.Count < 4)
-            {
-                blueTeam.Add(args.Player.Index);
-                args.Player.Teleport(teamSpawns[2].X * 16, teamSpawns[2].Y * 16);
-                args.Player.SendSuccessMessage("You have joined the Blue team!");
-            }
-            else
-            {
-                args.Player.SendErrorMessage("The selected team is full!");
-            }
+            teamScores[team] = 0;
         }
+        TSPlayer.All.SendInfoMessage("Team Death Match has started!");
+    }
 
-        private void LeaveTeam(CommandArgs args)
+    // Command: /endtdm (Admin-only)
+    private void EndTDM(CommandArgs args)
+    {
+        if (!args.Player.HasPermission("tdm.end"))
         {
-            if (redTeam.Remove(args.Player.Index) || blueTeam.Remove(args.Player.Index))
-            {
-                args.Player.SendSuccessMessage("You have left your team.");
-            }
-            else
-            {
-                args.Player.SendErrorMessage("You are not part of any team.");
-            }
+            args.Player.SendErrorMessage("You don't have permission to end the game.");
+            return;
         }
+        gameActive = false;
+        TSPlayer.All.SendInfoMessage("Team Death Match has ended.");
+    }
 
-        private void OnMatchTimerElapsed(object sender, ElapsedEventArgs e)
+    // Command: /tdmstatus
+    private void TDMStatus(CommandArgs args)
+    {
+        if (gameActive)
         {
-            matchDuration--;
-            if (matchDuration <= 0)
+            string scores = string.Join(", ", teamScores.Select(kv => $"{kv.Key}: {kv.Value}"));
+            args.Player.SendInfoMessage($"Game is active. Scores: {scores}");
+        }
+        else
+        {
+            args.Player.SendInfoMessage("Game is not active.");
+        }
+    }
+
+    // Event: Player death handler
+    private void OnPlayerDeath(object sender, GetDataHandlers.PlayerDeathEventArgs args)
+    {
+        if (!gameActive)
+            return;
+        TSPlayer victim = args.Player;
+        TSPlayer killer = args.KillerPlayer;
+        if (killer != null && playerTeams.ContainsKey(killer.Name) && playerTeams.ContainsKey(victim.Name))
+        {
+            string killerTeam = playerTeams[killer.Name];
+            string victimTeam = playerTeams[victim.Name];
+            if (killerTeam != victimTeam) // Ignore friendly fire
             {
-                EndMatch();
+                teamScores[killerTeam]++;
+                TSPlayer.All.SendInfoMessage($"Team {killerTeam} scored! Current scores: Red: {teamScores["Red"]}, Blue: {teamScores["Blue"]}");
+                if (teamScores[killerTeam] >= 50)
+                {
+                    TSPlayer.All.SendInfoMessage($"Team {killerTeam} wins!");
+                    gameActive = false;
+                }
             }
         }
+    }
 
-        private void EndMatch()
+    // Event: Player spawn handler
+    private void OnPlayerSpawn(object sender, GetDataHandlers.PlayerSpawnEventArgs args)
+    {
+        if (!gameActive)
+            return;
+        TSPlayer player = TShock.Players[args.PlayerId];
+        if (player != null && playerTeams.ContainsKey(player.Name))
         {
-            matchTimer.Stop();
-
-            string winningTeam = teamScores[1] > teamScores[2] ? "Red" : "Blue";
-            TSPlayer.All.SendInfoMessage($"Match over! {winningTeam} team wins with {Math.max(teamScores[1], teamScores[2])} kills.");
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
+            string team = playerTeams[player.Name];
+            if (teamSpawns.ContainsKey(team))
             {
-                matchTimer.Dispose();
+                Vector2 spawn = teamSpawns[team];
+                args.SpawnX = (int)spawn.X;
+                args.SpawnY = (int)spawn.Y;
             }
-            base.Dispose(disposing);
         }
+    }
+
+    // Event: Player disconnect handler
+    private void OnServerLeave(LeaveEventArgs args)
+    {
+        TSPlayer player = TShock.Players[args.Who];
+        if (player != null && playerTeams.ContainsKey(player.Name))
+        {
+            playerTeams.Remove(player.Name);
+        }
+    }
+
+    // Cleanup event registrations
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            GetDataHandlers.PlayerDeathEvent -= OnPlayerDeath;
+            GetDataHandlers.PlayerSpawnEvent -= OnPlayerSpawn;
+            ServerApi.Hooks.ServerLeave.Deregister(this, OnServerLeave);
+        }
+        base.Dispose(disposing);
     }
 }
