@@ -1,27 +1,9 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <Deterministic>true</Deterministic>
-  </PropertyGroup>
+	<Import Project="..\..\template.targets" />
 
-  <PropertyGroup>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageType>TShockPlugin</PackageType>
-    <IncludeSymbols>true</IncludeSymbols>
-    <!-- https://github.com/Pryaxis/TShock/isnsues/2895 -->
-    <!-- <GenerateDocumentationFile>true</GenerateDocumentationFile> -->
-    <EmbedAllSources>true</EmbedAllSources>
-    <PublishRepositoryUrl>true</PublishRepositoryUrl>
-  </PropertyGroup>
+	<ItemGroup>
+	  <ProjectReference Include="..\LazyAPI\LazyAPI.csproj" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="TShock" Version="5.1.3">
-      <ExcludeAssets>ContentFiles</ExcludeAssets>
-    </PackageReference>
-    <None Include="../README.md" Pack="true" PackagePath="\"/>
-  </ItemGroup>
 </Project>
