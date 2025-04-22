@@ -1,87 +1,115 @@
-using LazyAPI;
+using System;
+using System.Collections.Generic;
+using System.IO;
 using Terraria;
 using TerrariaApi.Server;
 using TShockAPI;
+using Newtonsoft.Json;
 
-namespace AutoBroadcast;
-
-[ApiVersion(2, 1)]
-public class AutoBroadcast : LazyPlugin
+namespace SpecialEventsPlugin
 {
-    public override string Name => System.Reflection.Assembly.GetExecutingAssembly().GetName().Name!;
-
-    public override string Author => "Scavenger,Cai";
-    public override string Description => "Automatic Broadcast Plugin";
-    
-    public override Version Version => new (1, 1, 2);
-
-    private DateTime _lastUpdate = DateTime.Now;
-
-    public AutoBroadcast(Main game) : base(game) { }
-
-    public override void Initialize()
+    [ApiVersion(2, 1)]
+    public class SpecialEventsPlugin : TerrariaPlugin
     {
-        ServerApi.Hooks.GameUpdate.Register(this, this.OnUpdate);
-        ServerApi.Hooks.ServerChat.Register(this, OnChat, int.MinValue); // Lowest priority, so no need to handle commands
+        public override string Name => "SpecialEventsPlugin";
+        public override string Author => "Same/AI";
+        public override string Description => "Custom welcome/leave msg and special event access by player/group.";
+        public override Version Version => new Version(1, 0, 0);
+
+        private static string ConfigPath => Path.Combine(TShock.SavePath, "SpecialEventsConfig.json");
+        private SpecialEventsConfig Config;
+
+        public SpecialEventsPlugin(Main game) : base(game) { }
+
+        public override void Initialize()
+        {
+            LoadConfig();
+            ServerApi.Hooks.ServerJoin.Register(this, OnJoin);
+            ServerApi.Hooks.ServerLeave.Register(this, OnLeave);
+            Commands.ChatCommands.Add(new Command(CmdEvent, "event"));
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                ServerApi.Hooks.ServerJoin.Deregister(this, OnJoin);
+                ServerApi.Hooks.ServerLeave.Deregister(this, OnLeave);
+            }
+            base.Dispose(disposing);
+        }
+
+        private void LoadConfig()
+        {
+            if (!File.Exists(ConfigPath))
+            {
+                Config = SpecialEventsConfig.Default();
+                File.WriteAllText(ConfigPath, JsonConvert.SerializeObject(Config, Formatting.Indented));
+            }
+            else
+            {
+                Config = JsonConvert.DeserializeObject<SpecialEventsConfig>(File.ReadAllText(ConfigPath));
+            }
+        }
+
+        private void OnJoin(JoinEventArgs args)
+        {
+            var plr = TShock.Players[args.Who];
+            if (plr != null && plr.Active)
+            {
+                string msg = Config.WelcomeMessage.Replace("{player}", plr.Name);
+                plr.SendMessage(msg, TSColor.Green);
+            }
+        }
+
+        private void OnLeave(LeaveEventArgs args)
+        {
+            var plr = TShock.Players[args.Who];
+            if (plr != null)
+            {
+                string msg = Config.LeaveMessage.Replace("{player}", plr.Name);
+                TShock.Utils.Broadcast(msg, TSColor.Red);
+            }
+        }
+
+        private void CmdEvent(CommandArgs args)
+        {
+            var plr = args.Player;
+            if (IsAllowed(plr))
+            {
+                plr.SendSuccessMessage("Welcome to the special event!");
+                // Place event code here
+            }
+            else
+            {
+                plr.SendErrorMessage("You are not allowed to join this event.");
+            }
+        }
+
+        private bool IsAllowed(TSPlayer plr)
+        {
+            if (plr == null) return false;
+            if (Config.AllowedPlayerNames.Contains(plr.Name))
+                return true;
+            foreach (var grp in Config.AllowedGroups)
+            {
+                if (plr.Group.Name.Equals(grp, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
     }
 
-    protected override void Dispose(bool disposing)
+    public class SpecialEventsConfig
     {
-        if (disposing)
-        {
-            ServerApi.Hooks.GameUpdate.Deregister(this, this.OnUpdate);
-            ServerApi.Hooks.ServerChat.Deregister(this, OnChat);
-        }
-        base.Dispose(disposing);
-    }
+        public string WelcomeMessage { get; set; } = "Welcome to the server, {player}!";
+        public string LeaveMessage { get; set; } = "{player} has left. See you next time!";
+        public List<string> AllowedPlayerNames { get; set; } = new List<string> { "YourNameHere" };
+        public List<string> AllowedGroups { get; set; } = new List<string> { "admin", "eventer" };
 
-    /*
-     * Runs every second
-     * Updates the timers for all broadcasts
-     */
-    private void OnUpdate(EventArgs args)
-    {
-        if (!((DateTime.Now - this._lastUpdate).TotalSeconds >= 1)) 
+        public static SpecialEventsConfig Default()
         {
-            return;
-        }
-        
-        this._lastUpdate = DateTime.Now;
-        
-        foreach (var broadcast in AutoBroadcastConfig.Instance.Broadcasts)
-        {
-            if (!broadcast.Enabled || broadcast.Interval == 0) // Do not update broadcasts that are not enabled or have an interval of 0
-            {
-                continue;
-            }
-            broadcast.SecondUpdate();
-        }
-    }
-
-    /*
-     * Chat keyword-triggered broadcasts
-     * Triggers broadcasts when chat keywords are matched
-     */
-    private static void OnChat(ServerChatEventArgs args)
-    {
-        var plr = TShock.Players[args.Who];
-        
-        if (plr == null)
-        {
-            return;
-        }
-        
-        foreach (var broadcast in AutoBroadcastConfig.Instance.Broadcasts)
-        {
-            if (!broadcast.Enabled)
-            {
-                continue;
-            }
-            
-            if (broadcast.TriggerWords.Any(word => args.Text.Contains(word))) // Check if the message contains keywords
-            {
-                broadcast.RunTriggerWords(plr);
-            }
+            return new SpecialEventsConfig();
         }
     }
 }
