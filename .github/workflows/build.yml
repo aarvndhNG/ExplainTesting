@@ -20,12 +20,12 @@ jobs:
     - name: Restore dependencies
       run: dotnet restore
 
-    - name: Build plugin
-      run: dotnet build -c Release
+    - name: Build plugin (Release)
+      run: dotnet build --configuration Release
 
-    - name: Upload plugin DLL
+    - name: Upload DLL
       uses: actions/upload-artifact@v4
       with:
-        name: Compiled-Plugin
+        name: Plugin-DLL
         path: |
           **/bin/Release/**/*.dll
