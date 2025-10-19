@@ -1,9 +1,16 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <OutputType>Library</OutputType>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
 
-	<Import Project="..\..\template.targets" />
-
-	<ItemGroup>
-	  <ProjectReference Include="..\LazyAPI\LazyAPI.csproj" />
-	</ItemGroup>
-
+  <ItemGroup>
+    <Reference Include="TShockAPI">
+      <HintPath>./lib/TShockAPI.dll</HintPath>
+    </Reference>
+    <Reference Include="TerrariaServer">
+      <HintPath>./lib/TerrariaServer.exe</HintPath>
+    </Reference>
+  </ItemGroup>
 </Project>
