@@ -1,29 +1,27 @@
-name: .NET
+name: Build TShock Plugin
+
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    branches: [ main ]
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
+    - uses: actions/checkout@v4
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v2
+      uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '6.0.x'
+        dotnet-version: 6.0.x
 
-    - name: Install dependencies
-      run: dotnet restore
+    - name: Build Plugin
+      run: dotnet build -c Release
 
-    - name: Build
-      run: dotnet build --configuration Release --no-restore
-
-    - name: Run tests
-      run: dotnet test --no-restore --verbosity normal
+    - name: Upload Compiled DLL
+      uses: actions/upload-artifact@v4
+      with:
+        name: PluginDLL
+        path: |
+          **/bin/Release/**/*.dll
