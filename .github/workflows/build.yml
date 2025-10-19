@@ -9,19 +9,23 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 6.0.x
 
-    - name: Build Plugin
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build plugin
       run: dotnet build -c Release
 
-    - name: Upload Compiled DLL
+    - name: Upload plugin DLL
       uses: actions/upload-artifact@v4
       with:
-        name: PluginDLL
+        name: Compiled-Plugin
         path: |
           **/bin/Release/**/*.dll
