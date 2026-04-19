@@ -64,6 +64,17 @@ namespace MapTeleport
             player.SendSuccessMessage((player.GetData<bool>(DATA_KEY) ? "En" : "Dis") + "abled map teleport.");
         }
 
+        private void SafeTeleport(TSPlayer player, float x, float y)
+        {
+            player.TPlayer.position.X = x;
+            player.TPlayer.position.Y = y;
+            NetMessage.SendData((int)PacketTypes.PlayerUpdate, -1, -1, null, player.Index);
+
+            // Send standard teleport packet 65 (Teleport)
+            NetMessage.SendData((int)PacketTypes.Teleport, -1, -1, null,
+                0, player.Index, x, y, 1);
+        }
+
         private bool IsSafeTile(int x, int y)
         {
             var tile = Main.tile[x, y];
@@ -93,7 +104,7 @@ namespace MapTeleport
 
                     if (player.HasPermission(Permissions.TP_IN_BLOCKS))
                     {
-                        player.Teleport(X * 16, Y * 16);
+                        SafeTeleport(player, X * 16, Y * 16);
                         player.SendSuccessMessage($"Teleported to ({X}, {Y})");
                     }
 
@@ -108,7 +119,7 @@ namespace MapTeleport
 
                         if (canTeleport)
                         {
-                            player.Teleport(X * 16, Y * 16);
+                            SafeTeleport(player, X * 16, Y * 16);
                             player.SendSuccessMessage($"Teleported to ({X}, {Y})");
                         }
                         else
